@@ -18,7 +18,7 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: "Missing GEMINI_API_KEY" });
     }
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_KEY}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
     const requestBody = {
       contents: [{
@@ -36,11 +36,15 @@ export default async function handler(req, res) {
 
     const apiResp = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { 
+        "Content-Type": "application/json",
+        "x-goog-api-key": `${GEMINI_KEY}`
+      },
       body: JSON.stringify(requestBody)
     });
 
     const raw = await apiResp.json();
+    console.log("📥 GEMINI RAW RESPONSE:", JSON.stringify(raw, null, 2));
 
     if (!apiResp.ok) {
       console.error("❌ API Error:", JSON.stringify(raw));
