@@ -1,12 +1,17 @@
 // frontend/src/app.js
 // KIDS3D TEACHER - PRODUCTION READY (December 2025)
 // Enhanced with Smart Captions, Dynamic Tick System, Word Highlighting
+// Fixed: Chrome compatibility, Emoji removal, Better voice selection
 
 import { startListening, stopListening } from "./speech.js";
 import { avatarStartTalking, avatarStopTalking } from "./threejs-avatar.js";
 
 const API_URL = "https://public-speaking-for-kids-backend-v2.vercel.app/api/generate";
 
+// DEVICE DETECTION
+function isMobileDevice() {
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+}
 
 // UI ELEMENTS
 const micBtn = document.getElementById("micBtn");
@@ -369,24 +374,119 @@ function buildPrompt(userText) {
   return "You are an encouraging English teacher for Indian kids.\n\n" + modeInstruction + "\n\nLevel: " + currentClass + "\n" + gradeText + "\n\nRecent conversation:\n" + (history || "(First message)") + "\n\nStudent: \"" + userText + "\"\n\nRespond now! If correcting, put correct sentence in quotes.";
 }
 
-// TTS TEXT CLEANUP
+// TTS TEXT CLEANUP - ENHANCED (REMOVES ALL EMOJIS)
 function cleanTextForSpeech(text) {
   if (!text) return "";
   
   return text
+    // Remove ALL emoji ranges
+    .replace(/[\u{1F600}-\u{1F64F}]/gu, '')  // Emoticons
+    .replace(/[\u{1F300}-\u{1F5FF}]/gu, '')  // Symbols & Pictographs
+    .replace(/[\u{1F680}-\u{1F6FF}]/gu, '')  // Transport & Map
+    .replace(/[\u{1F700}-\u{1F77F}]/gu, '')  // Alchemical
+    .replace(/[\u{1F780}-\u{1F7FF}]/gu, '')  // Geometric Shapes
+    .replace(/[\u{1F800}-\u{1F8FF}]/gu, '')  // Supplemental Arrows
+    .replace(/[\u{1F900}-\u{1F9FF}]/gu, '')  // Supplemental Symbols
+    .replace(/[\u{1FA00}-\u{1FA6F}]/gu, '')  // Chess Symbols
+    .replace(/[\u{1FA70}-\u{1FAFF}]/gu, '')  // Symbols Extended-A
+    .replace(/[\u{2600}-\u{26FF}]/gu, '')    // Miscellaneous Symbols
+    .replace(/[\u{2700}-\u{27BF}]/gu, '')    // Dingbats
+    .replace(/[\u{FE00}-\u{FE0F}]/gu, '')    // Variation Selectors
+    .replace(/[\u{1F1E6}-\u{1F1FF}]/gu, '')  // Flags
+    .replace(/[\u{1F3FB}-\u{1F3FF}]/gu, '')  // Skin tones
+    .replace(/[\u{200D}]/gu, '')             // Zero-width joiner
+    
+    // Remove markdown formatting
     .replace(/[*_~`#]/g, '')
     .replace(/\[([^\]]+)\]/g, '$1')
-    .replace(/\(([^)]+)\)/g, '$1')
+    .replace(/\(([^)]+)\)/g, '')
+    
+    // Remove special symbols
     .replace(/[•▪▫►▻→↦]/g, '')
-    .replace(/[\u{1F3FB}-\u{1F3FF}]/gu, '')
+    .replace(/[★☆✓✔✗✘]/g, '')
+    .replace(/[♠♣♥♦]/g, '')
+    
+    // Clean quotes
+    .replace(/[""]/g, '"')
+    .replace(/['']/g, "'")
+    
+    // Remove excessive punctuation
     .replace(/\.{2,}/g, '.')
     .replace(/!{2,}/g, '!')
     .replace(/\?{2,}/g, '?')
+    
+    // Clean whitespace
     .replace(/\s+/g, ' ')
     .trim();
 }
 
-// TTS WITH WORD HIGHLIGHTING
+// SMART VOICE SELECTION - CROSS-BROWSER & MOBILE
+function selectBestVoice() {
+  const voices = window.speechSynthesis.getVoices();
+  
+  if (!voices || voices.length === 0) {
+    console.warn("No voices available yet");
+    return null;
+  }
+
+  // Priority 1: Indian English voices
+  const indianVoices = voices.filter(function(v) {
+    return v.lang.startsWith("en-IN");
+  });
+  
+  if (indianVoices.length > 0) {
+    const femaleIndian = indianVoices.find(function(v) {
+      return /female|woman|girl/i.test(v.name);
+    });
+    if (femaleIndian) {
+      log("Using voice: " + femaleIndian.name + " (Indian Female)");
+      return femaleIndian;
+    }
+    log("Using voice: " + indianVoices[0].name + " (Indian)");
+    return indianVoices[0];
+  }
+
+  // Priority 2: US/UK English voices
+  const englishVoices = voices.filter(function(v) {
+    return v.lang.startsWith("en-US") || v.lang.startsWith("en-GB");
+  });
+  
+  if (englishVoices.length > 0) {
+    const premium = englishVoices.find(function(v) {
+      return /premium|enhanced|natural|google|microsoft/i.test(v.name);
+    });
+    if (premium) {
+      log("Using voice: " + premium.name + " (Premium)");
+      return premium;
+    }
+    
+    const female = englishVoices.find(function(v) {
+      return /female|woman|girl|samantha|victoria|zira/i.test(v.name);
+    });
+    if (female) {
+      log("Using voice: " + female.name + " (Female)");
+      return female;
+    }
+    
+    log("Using voice: " + englishVoices[0].name);
+    return englishVoices[0];
+  }
+
+  // Priority 3: Any English voice
+  const anyEnglish = voices.find(function(v) {
+    return v.lang.startsWith("en");
+  });
+  
+  if (anyEnglish) {
+    log("Using voice: " + anyEnglish.name + " (Generic English)");
+    return anyEnglish;
+  }
+
+  log("Using voice: " + voices[0].name + " (Fallback)");
+  return voices[0];
+}
+
+// TTS WITH WORD HIGHLIGHTING - CHROME COMPATIBLE
 function speak(text) {
   if (!text || !text.trim()) return;
 
@@ -397,19 +497,29 @@ function speak(text) {
 
   const utter = new SpeechSynthesisUtterance(cleanedText);
   utter.lang = "en-IN";
-  utter.rate = 0.95;
-  utter.pitch = 1.25;
-  utter.volume = 1;
+  
+  // Mobile-specific adjustments
+  if (isMobileDevice()) {
+    utter.rate = 0.9;   // Slightly slower on mobile
+    utter.pitch = 1.0;  // Natural pitch on mobile
+    utter.volume = 1;
+  } else {
+    utter.rate = 0.95;
+    utter.pitch = 1.25;
+    utter.volume = 1;
+  }
 
-  const voices = window.speechSynthesis.getVoices();
-  const bestVoice = voices.find(function(v) { return v.lang.startsWith("en-IN"); }) ||
-                    voices.find(function(v) { return v.lang.startsWith("en") && /male/i.test(v.name); }) ||
-                    voices.find(function(v) { return v.lang.startsWith("en"); });
-
+  // Use smart voice selection
+  const bestVoice = selectBestVoice();
   if (bestVoice) utter.voice = bestVoice;
 
   currentUtterance = utter;
   let wordIndex = 0;
+  let highlightInterval = null;
+
+  // Calculate average word duration for fallback highlighting
+  const words = cleanedText.split(' ');
+  const avgWordDuration = (cleanedText.length / words.length) * 100 / utter.rate;
 
   utter.onstart = function() {
     isSpeaking = true;
@@ -422,14 +532,41 @@ function speak(text) {
     }
     
     log("Speech started");
+
+    // CHROME FIX: Time-based word highlighting fallback
+    highlightInterval = setInterval(function() {
+      if (wordIndex < words.length) {
+        highlightCaptionWord(wordIndex);
+        wordIndex++;
+        
+        const currentWords = captionChunks[currentChunkIndex] ? 
+          captionChunks[currentChunkIndex].split(' ').length : 0;
+        
+        if (wordIndex >= currentWords && currentChunkIndex < captionChunks.length - 1) {
+          wordIndex = 0;
+          setTimeout(function() {
+            advanceToNextChunk();
+          }, 200);
+        }
+      } else {
+        clearInterval(highlightInterval);
+      }
+    }, avgWordDuration);
   };
 
+  // Keep boundary event for Edge/Safari (better accuracy when available)
   utter.onboundary = function(event) {
-    if (event.name === 'word') {
+    if (event.name === 'word' && highlightInterval) {
+      // If boundary events work, clear the fallback interval
+      clearInterval(highlightInterval);
+      highlightInterval = null;
+      
       highlightCaptionWord(wordIndex);
       wordIndex++;
       
-      const currentWords = captionChunks[currentChunkIndex] ? captionChunks[currentChunkIndex].split(' ').length : 0;
+      const currentWords = captionChunks[currentChunkIndex] ? 
+        captionChunks[currentChunkIndex].split(' ').length : 0;
+      
       if (wordIndex >= currentWords) {
         wordIndex = 0;
         setTimeout(function() {
@@ -440,6 +577,8 @@ function speak(text) {
   };
 
   utter.onend = function() {
+    if (highlightInterval) clearInterval(highlightInterval);
+    
     isSpeaking = false;
     if (avatarStopTalking) avatarStopTalking();
     hideCaption();
@@ -455,6 +594,8 @@ function speak(text) {
 
   utter.onerror = function(event) {
     console.error("Speech error:", event);
+    if (highlightInterval) clearInterval(highlightInterval);
+    
     isSpeaking = false;
     if (avatarStopTalking) avatarStopTalking();
     hideCaption();
@@ -560,7 +701,7 @@ async function sendToBackend(text) {
     console.error("Backend error:", err);
     
     if (replyBox) {
-      replyBox.innerHTML = '<p style="color:#f44336; padding:20px; background:#ffebee; border-radius:12px;">Connection error. Is backend running on port 4000?</p>';
+      replyBox.innerHTML = '<p style="color:#f44336; padding:20px; background:#ffebee; border-radius:12px;">Connection error. Please check your internet connection.</p>';
     }
     
     if (statusEl) {
@@ -729,14 +870,34 @@ function initialize() {
     defaultClassBtn.classList.add("active");
   }
   
+  // Enhanced voice loading for Chrome/Mobile
   if (window.speechSynthesis) {
-    window.speechSynthesis.getVoices();
+    let voices = window.speechSynthesis.getVoices();
     
-    if (window.speechSynthesis.onvoiceschanged !== undefined) {
-      window.speechSynthesis.onvoiceschanged = function() {
-        const voices = window.speechSynthesis.getVoices();
-        log(voices.length + " voices loaded");
-      };
+    if (voices.length > 0) {
+      log(voices.length + " voices loaded immediately");
+    } else {
+      log("Waiting for voices to load...");
+    }
+    
+    // Chrome requires waiting for voiceschanged event
+    window.speechSynthesis.onvoiceschanged = function() {
+      voices = window.speechSynthesis.getVoices();
+      log(voices.length + " voices loaded");
+      
+      // Log available English voices for debugging
+      voices.forEach(function(voice, i) {
+        if (voice.lang.startsWith("en")) {
+          console.log(i + ": " + voice.name + " (" + voice.lang + ")");
+        }
+      });
+    };
+    
+    // Force voice loading on mobile
+    if (isMobileDevice()) {
+      setTimeout(function() {
+        window.speechSynthesis.getVoices();
+      }, 100);
     }
   }
   
