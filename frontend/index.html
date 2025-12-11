@@ -3,10 +3,10 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Kids3D Teacher - Interactive Learning 🎓</title>
+  <title>Kids3D Teacher - Your English Learning Companion 🕷️</title>
   
-  <!-- Modern fonts for kids -->
-  <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;600;700;800&family=Poppins:wght@500;600;700&display=swap" rel="stylesheet">
+  <!-- Optimized fonts (removed heavy Fredoka One) -->
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700&display=swap" rel="stylesheet">
 
   <link rel="stylesheet" href="/style.css" />
 </head>
@@ -14,119 +14,120 @@
   <div class="frame">
     
     <!-- ========================================
-         LEFT PANEL - AVATAR STUDIO
+         LEFT PANEL - AVATAR COMPANION
          ======================================== -->
-    <div class="panel left" role="main" aria-label="Avatar Studio">
-      <h1>Kids3D Teacher 🎓</h1>
+    <div class="panel left" role="main" aria-label="Avatar Companion">
+      <h1>🕷️ Spidey Teacher</h1>
       <p class="subtitle">
-        Learn English with fun • Practice speaking • Get instant feedback!
+        Your friendly companion for learning English
       </p>
 
       <!-- 3D Avatar Container (UNCHANGED - Critical for Three.js) -->
-      <div id="canvas-container" aria-label="3D Avatar">
+      <div id="canvas-container" aria-label="3D Avatar Companion">
         <div id="avatar-scroll-safe"></div>
         
-        <!-- NEW: Dynamic Caption Box (Overlay at bottom) -->
+        <!-- Dynamic Caption Box (Replika-style overlay) -->
         <div id="caption-box" class="caption-box">
-          <div class="caption-icon">🔊</div>
+          <div class="caption-icon">💬</div>
           <div id="caption-text" class="caption-text">
-            Avatar is ready! Click the mic to start...
+            Hey friend! Click the mic to start chatting...
           </div>
         </div>
       </div>
 
-      <!-- NEW: Floating Control Bar (Modern redesign of existing buttons) -->
+      <!-- Simplified Controls - Hero Mic Button + Hidden Menu -->
       <div class="floating-controls" role="toolbar">
-        <button id="micBtn" class="control-btn mic-btn" title="Start/Stop Recording">
+        <!-- HERO MIC BUTTON (Primary Action) -->
+        <button id="micBtn" class="control-btn mic-btn" title="Talk to Spidey">
           <span class="icon">🎤</span>
-          <span class="label">Speak</span>
+          <span class="label">Talk to Spidey</span>
         </button>
         
-        <button id="pauseTtsBtn" class="control-btn pause-btn" title="Pause Speech">
-          <span class="icon">⏸</span>
-        </button>
-        
-        <button id="resumeTtsBtn" class="control-btn resume-btn" style="display:none" title="Resume Speech">
-          <span class="icon">▶</span>
-        </button>
-        
-        <button id="stopTtsBtn" class="control-btn stop-btn" title="Stop Speech">
-          <span class="icon">⏹</span>
-        </button>
-        
+        <!-- TEST BUTTON (Secondary Action) -->
         <button id="testBtn" class="control-btn test-btn" title="Test Connection">
           <span class="icon">🧪</span>
         </button>
+
+        <!-- HIDDEN MENU BUTTON (Advanced Options) -->
+        <div style="position: relative;">
+          <button id="menuBtn" title="More Options">⋮</button>
+          <div id="advancedMenu">
+            <button id="clearBtn">🔄 Start Fresh Chat</button>
+            <button id="demoLessonBtn">🎯 Daily Challenge</button>
+          </div>
+        </div>
       </div>
 
-      <!-- Status Indicator -->
+      <!-- Status Bar (Friendly Messages) -->
       <div id="status" class="status-bar" aria-live="polite">
-        Ready when you are! 🎯
+        Hey friend! Ready to chat? 👋
       </div>
 
       <footer class="small">
-        Speak naturally • Get corrections • Build confidence ✨<br>
-        Works on phone, tablet, laptop • Made with ❤️ for learning
+        Chat naturally • Learn English • Have fun ✨<br>
+        Your friendly companion, available 24/7
       </footer>
     </div>
 
     <!-- ========================================
-         RIGHT PANEL - MY SPEECH LOG (CORRECTION HUB)
+         RIGHT PANEL - CHAT TIMELINE (REPLIKA STYLE)
          ======================================== -->
     <div class="panel right" role="complementary">
-      <h1>📝 My Speech Log</h1>
+      <h1>💬 Chat with Spidey</h1>
 
-      <!-- Typed Input (Keep for manual testing) -->
+      <!-- Input Row (Type or speak) -->
       <div class="input-row">
-        <input id="chatInput" type="text" placeholder="Type to practice..." aria-label="Type message" />
+        <input 
+          id="chatInput" 
+          type="text" 
+          placeholder="Type a message..." 
+          aria-label="Type message" 
+        />
         <button id="sendBtn" class="send-btn">Send</button>
       </div>
 
-      <!-- NEW: Correction Cards Container (Replaces simple conversation scroll) -->
-      <div id="conversationScroll" class="corrections-container">
-        <!-- Hidden elements kept for backward compatibility -->
-        <div id="transcript" class="bubble user" style="display:none"></div>
-        <div id="reply" class="bubble" style="display:none"></div>
+      <!-- CHAT TIMELINE (Main Feature - Replika Style) -->
+      <div id="chatTimeline" class="chat-timeline">
+        <!-- Messages will be dynamically inserted here by app.js -->
+        <!-- Example structure (generated by JavaScript):
         
-        <!-- Dynamic correction cards will be inserted here -->
-        <div id="correction-cards">
-          <!-- Example structure (will be generated by JS):
-          <div class="correction-card">
-            <div class="error-section">
-              <div class="icon">❌</div>
-              <div class="content">
-                <strong>You said:</strong> "what was time now"
-              </div>
-            </div>
-            <div class="success-section">
-              <div class="icon">✅</div>
-              <div class="content">
-                <strong>Corrected:</strong> "What is the time now?"
-              </div>
-            </div>
+        <div class="message-bubble user">
+          <div class="bubble-content">
+            Hello Spidey!
           </div>
-          -->
+          <div class="timestamp">2:30 PM</div>
         </div>
+        
+        <div class="message-bubble assistant">
+          <div class="avatar-icon">🕷️</div>
+          <div class="bubble-content">
+            Hey! Great to see you! 😊
+            <div class="correction-hint perfect">✅ Perfect sentence!</div>
+          </div>
+          <div class="timestamp">2:30 PM</div>
+        </div>
+        
+        -->
       </div>
 
-      <!-- Mode Toggle (Keep existing functionality) -->
+      <!-- Mode Toggle (Simplified - Hidden by Default) -->
       <div class="mode-section">
-        <strong class="section-title">Conversation Mode</strong>
+        <strong class="section-title">Mode</strong>
         <button id="modeToggle" class="mode-toggle">
           <span class="mode-text"></span>
           <div class="mode-switch"></div>
         </button>
         <p class="small mode-description">
-          Casual = fun chat • Practice = grammar correction + repeat
+          Casual = fun chat • Practice = grammar help
         </p>
       </div>
 
-      <!-- Class Selection (Keep existing) -->
+      <!-- Class Selection (Simplified) -->
       <div class="class-section">
-        <strong class="section-title">Choose Your Class</strong>
+        <strong class="section-title">Level</strong>
         <div id="classButtons" class="class-buttons">
-          <button class="class-btn active" data-class="class3">Class 3</button>
-          <button class="class-btn" data-class="class7">Class 7</button>
+          <button class="class-btn" data-class="class3">Class 3</button>
+          <button class="class-btn active" data-class="class7">Class 7</button>
           <button class="class-btn" data-class="class10">Class 10</button>
         </div>
       </div>
@@ -138,19 +139,9 @@
         <option value="class10">Class 10</option>
       </select>
 
-      <!-- Action Buttons -->
-      <div class="action-buttons">
-        <button id="clearBtn" class="action-btn clear-btn">
-          🗑️ New Session
-        </button>
-        <button id="demoLessonBtn" class="action-btn demo-btn">
-          🎯 Daily Challenge
-        </button>
-      </div>
-
-      <!-- Status Log (Keep for debugging) -->
+      <!-- Status Log (Minimized - For Debugging) -->
       <div class="log-section">
-        <strong class="section-title">Status Log</strong>
+        <strong class="section-title">Debug Log</strong>
         <div id="log" class="log-content"></div>
       </div>
     </div>

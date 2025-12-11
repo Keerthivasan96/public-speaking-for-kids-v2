@@ -1,30 +1,34 @@
 // frontend/src/app.js
-// KIDS3D TEACHER - PRODUCTION READY (December 2025)
-// Enhanced with Smart Captions, Dynamic Tick System, Word Highlighting
-// Fixed: Chrome compatibility, Emoji removal, Better voice selection
+// KIDS3D TEACHER - REPLIKA-INSPIRED VERSION (December 2025)
+// Continuous chat companion with expanded memory and timeline UI
+// 30% Replika-like: Persistent memory + Chat timeline + Friendly language
 
 import { startListening, stopListening } from "./speech.js";
 import { avatarStartTalking, avatarStopTalking } from "./threejs-avatar.js";
 
 const API_URL = "https://public-speaking-for-kids-backend-v2.vercel.app/api/generate";
 
+// ============================================================================
+// LOCALSTORAGE CONFIGURATION (EXPANDED FOR REPLIKA-STYLE)
+// ============================================================================
+const STORAGE_KEY = 'kids3d_conversation_history';
+const MAX_HISTORY_ITEMS = 200; // Increased from 50 for longer memory
+
 // DEVICE DETECTION
 function isMobileDevice() {
   return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 }
 
+// ============================================================================
 // UI ELEMENTS
+// ============================================================================
 const micBtn = document.getElementById("micBtn");
 const testBtn = document.getElementById("testBtn");
 const clearBtn = document.getElementById("clearBtn");
 const demoLessonBtn = document.getElementById("demoLessonBtn");
+const menuBtn = document.getElementById("menuBtn");
+const advancedMenu = document.getElementById("advancedMenu");
 
-const pauseTtsBtn = document.getElementById("pauseTtsBtn");
-const resumeTtsBtn = document.getElementById("resumeTtsBtn");
-const stopTtsBtn = document.getElementById("stopTtsBtn");
-
-const transcriptBox = document.getElementById("transcript");
-const replyBox = document.getElementById("reply");
 const statusEl = document.getElementById("status");
 const logEl = document.getElementById("log");
 
@@ -34,25 +38,27 @@ const modeToggle = document.getElementById("modeToggle");
 
 const chatInput = document.getElementById("chatInput");
 const sendBtn = document.getElementById("sendBtn");
-const conversationScroll = document.getElementById("conversationScroll");
+const chatTimeline = document.getElementById("chatTimeline");
 
 const captionBox = document.getElementById("caption-box");
 const captionText = document.getElementById("caption-text");
-const correctionCardsContainer = document.getElementById("correction-cards");
 
+// ============================================================================
 // STATE MANAGEMENT
+// ============================================================================
 let isListening = false;
 let isSpeaking = false;
 let lastSpokenText = "";
 let conversationHistory = [];
 let isPracticeMode = false;
-let currentUtterance = null;
 
 let captionChunks = [];
 let currentChunkIndex = 0;
 const CAPTION_CHAR_LIMIT = 150;
 
+// ============================================================================
 // LOGGING UTILITY
+// ============================================================================
 function log(msg) {
   if (logEl) {
     const timestamp = new Date().toLocaleTimeString();
@@ -62,7 +68,84 @@ function log(msg) {
   console.log("[Kids3D Teacher]", msg);
 }
 
+// ============================================================================
+// LOCALSTORAGE PERSISTENCE (EXPANDED CAPACITY)
+// ============================================================================
+
+function saveConversationHistory() {
+  try {
+    const historyToSave = conversationHistory.slice(-MAX_HISTORY_ITEMS);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(historyToSave));
+    log("💾 Conversation saved (" + historyToSave.length + " messages)");
+  } catch (err) {
+    console.error("Failed to save conversation:", err);
+    log("⚠️ Could not save conversation (storage full?)");
+  }
+}
+
+function loadConversationHistory() {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      conversationHistory = JSON.parse(saved);
+      log("📂 Loaded " + conversationHistory.length + " messages from history");
+      return true;
+    }
+  } catch (err) {
+    console.error("Failed to load conversation:", err);
+    log("⚠️ Could not load conversation history");
+  }
+  return false;
+}
+
+function clearConversationStorage() {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+    conversationHistory = [];
+    if (chatTimeline) chatTimeline.innerHTML = "";
+    log("🗑️ Storage cleared");
+  } catch (err) {
+    console.error("Failed to clear storage:", err);
+  }
+}
+
+// ============================================================================
+// CONVERSATION SUMMARY GENERATOR (HELPS AI REMEMBER CONTEXT)
+// ============================================================================
+
+function extractTopics(messages) {
+  const topics = new Set();
+  const keywords = [
+    'family', 'friend', 'school', 'teacher', 'cricket', 'football',
+    'movie', 'food', 'pet', 'dog', 'cat', 'favorite', 'yesterday',
+    'tomorrow', 'weekend', 'exam', 'test', 'game', 'phone', 'computer'
+  ];
+  
+  messages.forEach(function(msg) {
+    const text = msg.content.toLowerCase();
+    keywords.forEach(function(keyword) {
+      if (text.includes(keyword)) {
+        topics.add(keyword);
+      }
+    });
+  });
+  
+  return Array.from(topics).slice(0, 5);
+}
+
+function generateConversationSummary() {
+  if (conversationHistory.length < 10) return "";
+  
+  const topics = extractTopics(conversationHistory);
+  if (topics.length === 0) return "";
+  
+  return "Previous topics: " + topics.join(", ") + ".";
+}
+
+// ============================================================================
 // CAPTION BOX WITH CHUNKING & WORD HIGHLIGHTING
+// ============================================================================
+
 function chunkText(text, maxChars) {
   maxChars = maxChars || CAPTION_CHAR_LIMIT;
   const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
@@ -136,12 +219,15 @@ function hideCaption() {
   
   setTimeout(function() {
     if (captionText && !captionBox.classList.contains("active")) {
-      captionText.textContent = "Ready for your next question...";
+      captionText.textContent = "Ready to chat more? 😊";
     }
   }, 400);
 }
 
-// SMART TICK SYSTEM
+// ============================================================================
+// SMART CORRECTION DETECTION
+// ============================================================================
+
 function analyzeSentenceQuality(userText, correctedText, aiResponse) {
   const userLower = userText.toLowerCase().trim();
   const correctedLower = correctedText.toLowerCase().trim();
@@ -181,59 +267,6 @@ function analyzeSentenceQuality(userText, correctedText, aiResponse) {
   return 'perfect';
 }
 
-// CORRECTION CARD WITH DYNAMIC TICK SYSTEM
-function generateCorrectionCard(userText, correctedText, aiResponse) {
-  if (!correctionCardsContainer) return;
-
-  const quality = analyzeSentenceQuality(userText, correctedText, aiResponse);
-  
-  const card = document.createElement("div");
-  card.className = "correction-card";
-
-  const themes = {
-    'perfect': {
-      icon: '\u2705',
-      color: '#66bb6a',
-      bg: '#e8f5e9',
-      label: 'Perfect!',
-      showCorrection: false
-    },
-    'needs-improvement': {
-      icon: '\u26A0\uFE0F',
-      color: '#ffa726',
-      bg: '#fff8e1',
-      label: 'Good! Can be better',
-      showCorrection: true
-    },
-    'wrong': {
-      icon: '\u274C',
-      color: '#ef5350',
-      bg: '#ffebee',
-      label: "Let's fix this",
-      showCorrection: true
-    }
-  };
-
-  const theme = themes[quality];
-
-  if (!theme.showCorrection) {
-    card.innerHTML = '<div class="success-section" style="border-bottom: none; background: ' + theme.bg + '; border: 3px solid ' + theme.color + ';"><div class="icon" style="font-size: 32px;">' + theme.icon + '</div><div class="content"><strong style="color: ' + theme.color + '; font-size: 16px;">' + theme.label + '</strong><div style="margin-top: 10px; font-size: 17px; font-weight: 600;">"' + escapeHtml(userText) + '"</div>' + (aiResponse ? '<div style="margin-top: 12px; font-style: italic; color: #666; font-size: 14px; line-height: 1.5;">' + escapeHtml(aiResponse.substring(0, 100)) + (aiResponse.length > 100 ? '...' : '') + '</div>' : '') + '</div></div>';
-  } else {
-    card.innerHTML = '<div class="error-section" style="background: ' + theme.bg + '; border-bottom-color: ' + theme.color + '; border-bottom-width: 3px;"><div class="icon" style="font-size: 32px;">' + theme.icon + '</div><div class="content"><strong style="color: ' + theme.color + '; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px;">You said:</strong><div style="margin-top: 8px; font-size: 16px; font-weight: 600;">"' + escapeHtml(userText) + '"</div></div></div><div class="success-section" style="background: #e8f5e9; border: 3px solid #66bb6a; border-top: none;"><div class="icon" style="font-size: 28px;">\u2705\u2705</div><div class="content"><strong style="color: #66bb6a; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px;">Corrected:</strong><div style="margin-top: 8px; font-size: 17px; font-weight: 700; color: #2e7d32;">"' + escapeHtml(correctedText) + '"</div></div></div>';
-  }
-
-  correctionCardsContainer.insertBefore(card, correctionCardsContainer.firstChild);
-
-  setTimeout(function() {
-    if (conversationScroll) {
-      conversationScroll.scrollTo({ top: 0, behavior: "smooth" });
-    }
-  }, 100);
-
-  log("Card created: " + quality + " - Theme: " + theme.icon);
-}
-
-// SMART CORRECTION DETECTION
 function extractCorrection(userText, aiResponse) {
   let correctedText = userText;
   
@@ -327,100 +360,174 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
+// ============================================================================
+// REPLIKA-STYLE CHAT TIMELINE (INLINE CORRECTIONS)
+// ============================================================================
+
+function addMessageToTimeline(role, text, correction = null) {
+  if (!chatTimeline) return;
+  
+  const bubble = document.createElement("div");
+  bubble.className = "message-bubble " + role;
+  
+  const timestamp = new Date().toLocaleTimeString([], { 
+    hour: '2-digit', 
+    minute: '2-digit' 
+  });
+  
+  let correctionHtml = "";
+  if (correction && correction.quality !== "perfect") {
+    const icon = correction.quality === "wrong" ? "❌" : "⚠️";
+    correctionHtml = '<div class="correction-hint">' + icon + ' Better: "' + escapeHtml(correction.correctedText) + '"</div>';
+  } else if (correction && correction.quality === "perfect") {
+    correctionHtml = '<div class="correction-hint perfect">✅ Perfect sentence!</div>';
+  }
+  
+  if (role === "assistant") {
+    bubble.innerHTML = '<div class="avatar-icon">🕷️</div><div class="bubble-content">' + escapeHtml(text) + correctionHtml + '</div><div class="timestamp">' + timestamp + '</div>';
+  } else {
+    bubble.innerHTML = '<div class="bubble-content">' + escapeHtml(text) + '</div><div class="timestamp">' + timestamp + '</div>';
+  }
+  
+  chatTimeline.appendChild(bubble);
+  
+  // Smooth scroll to bottom
+  setTimeout(function() {
+    chatTimeline.scrollTo({ 
+      top: chatTimeline.scrollHeight, 
+      behavior: "smooth" 
+    });
+  }, 100);
+}
+
+function showTypingIndicator() {
+  if (!chatTimeline) return;
+  
+  const indicator = document.createElement("div");
+  indicator.className = "message-bubble assistant typing-indicator";
+  indicator.id = "typing-indicator";
+  indicator.innerHTML = '<div class="avatar-icon">🕷️</div><div class="typing-dots"><span></span><span></span><span></span></div>';
+  
+  chatTimeline.appendChild(indicator);
+  chatTimeline.scrollTo({ 
+    top: chatTimeline.scrollHeight, 
+    behavior: "smooth" 
+  });
+}
+
+function hideTypingIndicator() {
+  const indicator = document.getElementById("typing-indicator");
+  if (indicator) {
+    indicator.remove();
+  }
+}
+
+function renderSavedConversation() {
+  if (!chatTimeline || conversationHistory.length === 0) return;
+  
+  conversationHistory.forEach(function(msg) {
+    if (msg.role === "user") {
+      addMessageToTimeline("user", msg.content);
+    } else {
+      addMessageToTimeline("assistant", msg.content);
+    }
+  });
+  
+  log("📋 Rendered " + conversationHistory.length + " saved messages");
+}
+
+// ============================================================================
 // MARKDOWN RENDERING
+// ============================================================================
+
 function renderReplyMarkdown(md) {
   const html = marked && marked.parse ? marked.parse(md) : md;
   const safe = DOMPurify && DOMPurify.sanitize ? DOMPurify.sanitize(html, { ADD_ATTR: ["target"] }) : html;
   
-  if (replyBox) {
-    replyBox.innerHTML = safe;
-  }
-
   const div = document.createElement("div");
   div.innerHTML = safe;
   return (div.textContent || div.innerText || "").replace(/\s+/g, " ").trim();
 }
 
-function scrollToBottom() {
-  if (conversationScroll) {
-    conversationScroll.scrollTo({ 
-      top: conversationScroll.scrollHeight, 
-      behavior: "smooth" 
-    });
-  }
-}
+// ============================================================================
+// PROMPT BUILDER (EXPANDED MEMORY: 20 MESSAGES + SUMMARY)
+// ============================================================================
 
-// PROMPT BUILDER
 function buildPrompt(userText) {
   const currentClass = schoolMode && schoolMode.value ? schoolMode.value : "class7";
 
   const modeInstruction = isPracticeMode
-    ? "PRACTICE MODE ACTIVE: 1. Praise warmly first 2. If grammar/pronunciation error exists, point it out gently 3. ALWAYS show correct version in quotes: \"correct sentence here\" 4. Be specific about what was wrong 5. Encourage to try again Keep response under 80 words!"
-    : "CASUAL CHAT MODE: Be fun, friendly, encouraging! Only mention mistakes if they're major. Keep responses SHORT (40-60 words). Use emojis and be excited!";
+    ? "PRACTICE MODE: Gently correct errors and show the right way in quotes. Be encouraging!"
+    : "CASUAL CHAT MODE: Be a fun, supportive friend! Only mention big mistakes. Use emojis and keep it light!";
 
   const gradeConfig = {
-    class3: "Simple words, lots of excitement! Short responses (30-50 words). Use emojis! Examples: cricket, mangoes, school.",
-    class7: "Teen-friendly, clear corrections, relatable. Medium responses (50-80 words). Cool and supportive!",
-    class10: "Professional mentor, fluency focus, interview tips. Detailed but concise (60-100 words)."
+    class3: "Use simple words, lots of excitement! Short responses (30-50 words). Use emojis!",
+    class7: "Teen-friendly tone, clear but gentle corrections. Medium responses (50-80 words).",
+    class10: "Professional mentor, fluency focus, interview prep. Detailed responses (60-100 words)."
   };
 
   const gradeText = gradeConfig[currentClass] || gradeConfig.class7;
-
+  
+  // EXPANDED CONTEXT: Last 20 messages instead of 6
   const history = conversationHistory
-    .slice(-6)
-    .map(function(m) { return (m.role === "user" ? "Student" : "Teacher") + ": " + m.content; })
+    .slice(-20)
+    .map(function(m) { return (m.role === "user" ? "Student" : "Spidey") + ": " + m.content; })
     .join("\n");
+  
+  // Add conversation summary for long-term context
+  const summary = generateConversationSummary();
 
-  return "You are an encouraging English teacher for Indian kids.\n\n" + modeInstruction + "\n\nLevel: " + currentClass + "\n" + gradeText + "\n\nRecent conversation:\n" + (history || "(First message)") + "\n\nStudent: \"" + userText + "\"\n\nRespond now! If correcting, put correct sentence in quotes.";
+  return "You are Spidey, a friendly English learning companion for Indian kids.\n\n" + 
+         modeInstruction + "\n\n" +
+         "Level: " + currentClass + " - " + gradeText + "\n\n" +
+         "Context: You've been chatting with this student for " + conversationHistory.length + " messages. " + summary + "\n\n" +
+         "Recent conversation:\n" + (history || "(First message)") + "\n\n" +
+         "Student: \"" + userText + "\"\n\n" +
+         "Respond as a supportive friend, not a formal teacher. If correcting, put the correct sentence in quotes.";
 }
 
-// TTS TEXT CLEANUP - ENHANCED (REMOVES ALL EMOJIS)
+// ============================================================================
+// TTS TEXT CLEANUP
+// ============================================================================
+
 function cleanTextForSpeech(text) {
   if (!text) return "";
   
   return text
-    // Remove ALL emoji ranges
-    .replace(/[\u{1F600}-\u{1F64F}]/gu, '')  // Emoticons
-    .replace(/[\u{1F300}-\u{1F5FF}]/gu, '')  // Symbols & Pictographs
-    .replace(/[\u{1F680}-\u{1F6FF}]/gu, '')  // Transport & Map
-    .replace(/[\u{1F700}-\u{1F77F}]/gu, '')  // Alchemical
-    .replace(/[\u{1F780}-\u{1F7FF}]/gu, '')  // Geometric Shapes
-    .replace(/[\u{1F800}-\u{1F8FF}]/gu, '')  // Supplemental Arrows
-    .replace(/[\u{1F900}-\u{1F9FF}]/gu, '')  // Supplemental Symbols
-    .replace(/[\u{1FA00}-\u{1FA6F}]/gu, '')  // Chess Symbols
-    .replace(/[\u{1FA70}-\u{1FAFF}]/gu, '')  // Symbols Extended-A
-    .replace(/[\u{2600}-\u{26FF}]/gu, '')    // Miscellaneous Symbols
-    .replace(/[\u{2700}-\u{27BF}]/gu, '')    // Dingbats
-    .replace(/[\u{FE00}-\u{FE0F}]/gu, '')    // Variation Selectors
-    .replace(/[\u{1F1E6}-\u{1F1FF}]/gu, '')  // Flags
-    .replace(/[\u{1F3FB}-\u{1F3FF}]/gu, '')  // Skin tones
-    .replace(/[\u{200D}]/gu, '')             // Zero-width joiner
-    
-    // Remove markdown formatting
+    .replace(/[\u{1F600}-\u{1F64F}]/gu, '')
+    .replace(/[\u{1F300}-\u{1F5FF}]/gu, '')
+    .replace(/[\u{1F680}-\u{1F6FF}]/gu, '')
+    .replace(/[\u{1F700}-\u{1F77F}]/gu, '')
+    .replace(/[\u{1F780}-\u{1F7FF}]/gu, '')
+    .replace(/[\u{1F800}-\u{1F8FF}]/gu, '')
+    .replace(/[\u{1F900}-\u{1F9FF}]/gu, '')
+    .replace(/[\u{1FA00}-\u{1FA6F}]/gu, '')
+    .replace(/[\u{1FA70}-\u{1FAFF}]/gu, '')
+    .replace(/[\u{2600}-\u{26FF}]/gu, '')
+    .replace(/[\u{2700}-\u{27BF}]/gu, '')
+    .replace(/[\u{FE00}-\u{FE0F}]/gu, '')
+    .replace(/[\u{1F1E6}-\u{1F1FF}]/gu, '')
+    .replace(/[\u{1F3FB}-\u{1F3FF}]/gu, '')
+    .replace(/[\u{200D}]/gu, '')
     .replace(/[*_~`#]/g, '')
     .replace(/\[([^\]]+)\]/g, '$1')
     .replace(/\(([^)]+)\)/g, '')
-    
-    // Remove special symbols
     .replace(/[•▪▫►▻→↦]/g, '')
     .replace(/[★☆✓✔✗✘]/g, '')
     .replace(/[♠♣♥♦]/g, '')
-    
-    // Clean quotes
     .replace(/[""]/g, '"')
     .replace(/['']/g, "'")
-    
-    // Remove excessive punctuation
     .replace(/\.{2,}/g, '.')
     .replace(/!{2,}/g, '!')
     .replace(/\?{2,}/g, '?')
-    
-    // Clean whitespace
     .replace(/\s+/g, ' ')
     .trim();
 }
 
-// SMART VOICE SELECTION - CROSS-BROWSER & MOBILE
+// ============================================================================
+// SMART VOICE SELECTION
+// ============================================================================
+
 function selectBestVoice() {
   const voices = window.speechSynthesis.getVoices();
   
@@ -429,7 +536,6 @@ function selectBestVoice() {
     return null;
   }
 
-  // Priority 1: Indian English voices
   const indianVoices = voices.filter(function(v) {
     return v.lang.startsWith("en-IN");
   });
@@ -446,7 +552,6 @@ function selectBestVoice() {
     return indianVoices[0];
   }
 
-  // Priority 2: US/UK English voices
   const englishVoices = voices.filter(function(v) {
     return v.lang.startsWith("en-US") || v.lang.startsWith("en-GB");
   });
@@ -472,7 +577,6 @@ function selectBestVoice() {
     return englishVoices[0];
   }
 
-  // Priority 3: Any English voice
   const anyEnglish = voices.find(function(v) {
     return v.lang.startsWith("en");
   });
@@ -486,7 +590,10 @@ function selectBestVoice() {
   return voices[0];
 }
 
-// TTS WITH WORD HIGHLIGHTING - CHROME COMPATIBLE
+// ============================================================================
+// TTS WITH AUTO-PLAY
+// ============================================================================
+
 function speak(text) {
   if (!text || !text.trim()) return;
 
@@ -498,10 +605,9 @@ function speak(text) {
   const utter = new SpeechSynthesisUtterance(cleanedText);
   utter.lang = "en-IN";
   
-  // Mobile-specific adjustments
   if (isMobileDevice()) {
-    utter.rate = 0.9;   // Slightly slower on mobile
-    utter.pitch = 1.0;  // Natural pitch on mobile
+    utter.rate = 0.9;
+    utter.pitch = 1.0;
     utter.volume = 1;
   } else {
     utter.rate = 0.95;
@@ -509,15 +615,12 @@ function speak(text) {
     utter.volume = 1;
   }
 
-  // Use smart voice selection
   const bestVoice = selectBestVoice();
   if (bestVoice) utter.voice = bestVoice;
 
-  currentUtterance = utter;
   let wordIndex = 0;
   let highlightInterval = null;
 
-  // Calculate average word duration for fallback highlighting
   const words = cleanedText.split(' ');
   const avgWordDuration = (cleanedText.length / words.length) * 100 / utter.rate;
 
@@ -526,14 +629,9 @@ function speak(text) {
     if (avatarStartTalking) avatarStartTalking();
     showCaption(cleanedText);
     
-    if (statusEl) {
-      statusEl.textContent = "Teacher is speaking...";
-      statusEl.style.color = "#4caf50";
-    }
-    
+    setStatus("Here's what I think... 💬", "speaking");
     log("Speech started");
 
-    // CHROME FIX: Time-based word highlighting fallback
     highlightInterval = setInterval(function() {
       if (wordIndex < words.length) {
         highlightCaptionWord(wordIndex);
@@ -554,10 +652,8 @@ function speak(text) {
     }, avgWordDuration);
   };
 
-  // Keep boundary event for Edge/Safari (better accuracy when available)
   utter.onboundary = function(event) {
     if (event.name === 'word' && highlightInterval) {
-      // If boundary events work, clear the fallback interval
       clearInterval(highlightInterval);
       highlightInterval = null;
       
@@ -582,13 +678,8 @@ function speak(text) {
     isSpeaking = false;
     if (avatarStopTalking) avatarStopTalking();
     hideCaption();
-    currentUtterance = null;
     
-    if (statusEl) {
-      statusEl.textContent = "Your turn!";
-      statusEl.style.color = "#ff3333";
-    }
-    
+    setStatus("Your turn, friend! 👋", "ready");
     log("Speech ended");
   };
 
@@ -599,72 +690,67 @@ function speak(text) {
     isSpeaking = false;
     if (avatarStopTalking) avatarStopTalking();
     hideCaption();
-    currentUtterance = null;
     
-    if (statusEl) {
-      statusEl.textContent = "Error in speech. Try again!";
-      statusEl.style.color = "#ff5722";
-    }
+    setStatus("Oops! Lost my voice for a sec 😅", "error");
   };
 
   window.speechSynthesis.speak(utter);
 }
 
-// SPEECH CONTROLS
 function stopSpeech() {
   window.speechSynthesis.cancel();
   
   isSpeaking = false;
   if (avatarStopTalking) avatarStopTalking();
   hideCaption();
-  currentUtterance = null;
   
   log("Speech stopped");
 }
 
-function pauseSpeech() {
-  if (isSpeaking) {
-    window.speechSynthesis.pause();
-    if (avatarStopTalking) avatarStopTalking();
-    
-    if (statusEl) {
-      statusEl.textContent = "Paused";
-      statusEl.style.color = "#ff9800";
-    }
-    
-    if (pauseTtsBtn) pauseTtsBtn.style.display = "none";
-    if (resumeTtsBtn) resumeTtsBtn.style.display = "flex";
-  }
+// ============================================================================
+// FRIENDLY STATUS MESSAGES (REPLIKA-STYLE)
+// ============================================================================
+
+function setStatus(message, type) {
+  if (!statusEl) return;
+  
+  const friendlyMessages = {
+    ready: "Hey friend! Ready to chat? 👋",
+    listening: "I'm listening... 👂",
+    thinking: "Hmm, let me think... 🤔",
+    speaking: "Here's what I think... 💬",
+    error: "Oops! Lost connection for a sec 😅"
+  };
+  
+  statusEl.textContent = friendlyMessages[type] || message;
+  
+  const colors = {
+    ready: "#4caf50",
+    listening: "#2196f3",
+    thinking: "#ff9800",
+    speaking: "#9c27b0",
+    error: "#f44336"
+  };
+  
+  statusEl.style.color = colors[type] || "#666";
 }
 
-function resumeSpeech() {
-  window.speechSynthesis.resume();
-  if (avatarStartTalking) avatarStartTalking();
-  
-  if (statusEl) {
-    statusEl.textContent = "Teacher is speaking...";
-    statusEl.style.color = "#4caf50";
-  }
-  
-  if (pauseTtsBtn) pauseTtsBtn.style.display = "flex";
-  if (resumeTtsBtn) resumeTtsBtn.style.display = "none";
-}
-
+// ============================================================================
 // BACKEND COMMUNICATION
+// ============================================================================
+
 async function sendToBackend(text) {
   if (!text.trim()) return;
 
   conversationHistory.push({ role: "user", content: text });
+  saveConversationHistory();
   
-  if (transcriptBox) {
-    transcriptBox.textContent = text;
-    transcriptBox.style.display = "block";
-  }
-
-  if (statusEl) {
-    statusEl.textContent = "Teacher is thinking...";
-    statusEl.style.color = "#2196f3";
-  }
+  // Add user message to timeline
+  addMessageToTimeline("user", text);
+  
+  // Show typing indicator
+  showTypingIndicator();
+  setStatus("Hmm, let me think... 🤔", "thinking");
 
   const currentClass = schoolMode && schoolMode.value ? schoolMode.value : "class7";
 
@@ -687,31 +773,49 @@ async function sendToBackend(text) {
     const reply = data.reply || "Great job! Keep practicing!";
 
     conversationHistory.push({ role: "assistant", content: reply });
+    saveConversationHistory();
 
+    // Hide typing indicator
+    hideTypingIndicator();
+
+    // Extract correction and analyze quality
     const extraction = isPracticeMode ? extractCorrection(text, reply) : { correctedText: text };
     const correctedText = extraction.correctedText;
+    const quality = analyzeSentenceQuality(text, correctedText, reply);
 
-    generateCorrectionCard(text, correctedText, reply);
+    // Add AI message to timeline with inline correction
+    const correction = {
+      correctedText: correctedText,
+      quality: quality
+    };
+    
+    addMessageToTimeline("assistant", reply, correction);
 
+    // Speak the response
     const speakable = renderReplyMarkdown(reply);
-    scrollToBottom();
     speak(speakable);
 
   } catch (err) {
     console.error("Backend error:", err);
+    hideTypingIndicator();
     
-    if (replyBox) {
-      replyBox.innerHTML = '<p style="color:#f44336; padding:20px; background:#ffebee; border-radius:12px;">Connection error. Please check your internet connection.</p>';
-    }
-    
-    if (statusEl) {
-      statusEl.textContent = "Connection error";
-      statusEl.style.color = "#f44336";
-    }
+    addMessageToTimeline("assistant", "Oops! I lost connection for a moment. Can you try again? 😅");
+    setStatus("Oops! Lost connection for a sec 😅", "error");
   }
 }
 
+// ============================================================================
 // EVENT LISTENERS
+// ============================================================================
+
+if (menuBtn) {
+  menuBtn.addEventListener("click", function() {
+    if (advancedMenu) {
+      advancedMenu.classList.toggle("visible");
+    }
+  });
+}
+
 if (modeToggle) {
   modeToggle.addEventListener("click", function() {
     isPracticeMode = !isPracticeMode;
@@ -720,10 +824,7 @@ if (modeToggle) {
     const modeText = isPracticeMode ? "Practice Mode ON!" : "Casual Chat mode!";
     log(modeText);
     
-    if (statusEl) {
-      statusEl.textContent = modeText;
-      statusEl.style.color = isPracticeMode ? "#ff9800" : "#4caf50";
-    }
+    setStatus(modeText, isPracticeMode ? "thinking" : "ready");
   });
 }
 
@@ -735,24 +836,18 @@ if (micBtn) {
       
       micBtn.classList.remove("active");
       const label = micBtn.querySelector(".label");
-      if (label) label.textContent = "Speak";
+      if (label) label.textContent = "Talk to Spidey";
       
-      if (statusEl) {
-        statusEl.textContent = "Your turn!";
-        statusEl.style.color = "#ff3333";
-      }
+      setStatus("Your turn, friend! 👋", "ready");
     } else {
       stopSpeech();
       isListening = true;
       
       micBtn.classList.add("active");
       const label = micBtn.querySelector(".label");
-      if (label) label.textContent = "Stop";
+      if (label) label.textContent = "Listening...";
       
-      if (statusEl) {
-        statusEl.textContent = "Listening...";
-        statusEl.style.color = "#4caf50";
-      }
+      setStatus("I'm listening... 👂", "listening");
       
       startListening(sendToBackend);
     }
@@ -761,29 +856,22 @@ if (micBtn) {
 
 if (testBtn) {
   testBtn.addEventListener("click", function() {
-    sendToBackend("Hello teacher! Let's practice English together.");
+    sendToBackend("Hello Spidey! Let's chat!");
   });
 }
 
 if (clearBtn) {
   clearBtn.addEventListener("click", function() {
-    if (correctionCardsContainer) {
-      correctionCardsContainer.innerHTML = "";
+    const confirmClear = confirm("Start a fresh chat? All your messages will be cleared.");
+    
+    if (confirmClear) {
+      clearConversationStorage();
+      stopSpeech();
+      hideCaption();
+      
+      setStatus("Fresh start! What's on your mind? 😊", "ready");
+      log("Conversation cleared - Fresh start!");
     }
-    
-    if (transcriptBox) transcriptBox.style.display = "none";
-    if (replyBox) replyBox.innerHTML = "";
-    
-    conversationHistory = [];
-    stopSpeech();
-    hideCaption();
-    
-    if (statusEl) {
-      statusEl.textContent = "New session!";
-      statusEl.style.color = "#4caf50";
-    }
-    
-    log("Session cleared");
   });
 }
 
@@ -794,33 +882,11 @@ if (demoLessonBtn) {
       "Describe your best friend.",
       "What did you do yesterday?",
       "Where would you like to visit?",
-      "What's your favorite subject?"
+      "What's your favorite subject in school?"
     ];
     
     const challenge = challenges[Math.floor(Math.random() * challenges.length)];
-    speak("Here's your challenge: " + challenge);
-  });
-}
-
-if (pauseTtsBtn) {
-  pauseTtsBtn.addEventListener("click", pauseSpeech);
-}
-
-if (resumeTtsBtn) {
-  resumeTtsBtn.addEventListener("click", resumeSpeech);
-}
-
-if (stopTtsBtn) {
-  stopTtsBtn.addEventListener("click", function() {
-    stopSpeech();
-    
-    if (statusEl) {
-      statusEl.textContent = "Your turn!";
-      statusEl.style.color = "#ff3333";
-    }
-    
-    if (pauseTtsBtn) pauseTtsBtn.style.display = "flex";
-    if (resumeTtsBtn) resumeTtsBtn.style.display = "none";
+    speak("Here's a fun challenge: " + challenge);
   });
 }
 
@@ -833,7 +899,7 @@ classButtons.forEach(function(btn) {
       schoolMode.value = btn.dataset.class;
     }
     
-    log("Class: " + btn.textContent);
+    log("Class level: " + btn.textContent);
   });
 });
 
@@ -856,15 +922,34 @@ if (chatInput) {
   });
 }
 
+// ============================================================================
 // INITIALIZATION
+// ============================================================================
+
 function initialize() {
-  log("Kids3D Teacher ready!");
+  log("Kids3D Teacher - Replika Mode initialized! 🚀");
   
-  if (statusEl) {
-    statusEl.textContent = "Ready!";
-    statusEl.style.color = "#4caf50";
+  // Load saved conversation
+  const hasHistory = loadConversationHistory();
+  
+  if (hasHistory) {
+    log("✅ Previous conversation restored!");
+    renderSavedConversation();
+    setStatus("Hey! I missed you! 😊", "ready");
+    
+    // Show welcome back message in caption
+    if (captionText) {
+      captionText.textContent = "Welcome back, friend! Ready to continue?";
+    }
+  } else {
+    setStatus("Hey friend! Ready to chat? 👋", "ready");
+    
+    if (captionText) {
+      captionText.textContent = "Click the big button to start chatting!";
+    }
   }
   
+  // Set default class
   const defaultClassBtn = document.querySelector('[data-class="class7"]');
   if (defaultClassBtn) {
     defaultClassBtn.classList.add("active");
@@ -880,12 +965,10 @@ function initialize() {
       log("Waiting for voices to load...");
     }
     
-    // Chrome requires waiting for voiceschanged event
     window.speechSynthesis.onvoiceschanged = function() {
       voices = window.speechSynthesis.getVoices();
       log(voices.length + " voices loaded");
       
-      // Log available English voices for debugging
       voices.forEach(function(voice, i) {
         if (voice.lang.startsWith("en")) {
           console.log(i + ": " + voice.name + " (" + voice.lang + ")");
@@ -893,19 +976,12 @@ function initialize() {
       });
     };
     
-    // Force voice loading on mobile
     if (isMobileDevice()) {
       setTimeout(function() {
         window.speechSynthesis.getVoices();
       }, 100);
     }
   }
-  
-  setTimeout(function() {
-    if (captionText) {
-      captionText.textContent = "Click microphone to start!";
-    }
-  }, 500);
 }
 
 if (document.readyState === "loading") {
@@ -916,7 +992,7 @@ if (document.readyState === "loading") {
 
 document.addEventListener("visibilitychange", function() {
   if (document.hidden && isSpeaking) {
-    pauseSpeech();
+    stopSpeech();
   }
 });
 
