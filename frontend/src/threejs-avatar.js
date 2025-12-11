@@ -1,6 +1,9 @@
 // frontend/src/threejs-avatar.js
-// SPIDEY TEACHER — FINAL PRODUCTION VERSION (patched)
-// Zero scroll blocking | Zero jumping | Perfect eye centering | Real jaw sync | Heroic look
+// SPIDEY TEACHER — PRODUCTION (patched + multi-avatar + idle hand wiggle)
+// - Load /assets/avatar1.glb by default (change CONFIG.filename to avatar2.glb etc.)
+// - Smaller default targetSize to avoid "mask zoomed in"
+// - Detect jaw bone (existing) + detect hand bones (Left/Right) for subtle idle animation
+// - Non-cumulative transforms (stable, robust)
 
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
@@ -9,12 +12,40 @@ let scene, camera, renderer, avatar;
 let avatarReady = false;
 let isTalking = false;
 const clock = new THREE.Clock();
-let cached = { mouth: null };
+let cached = {
+  mouth: null,
+  leftHand: null,
+  rightHand: null
+};
 let container = null;
 let mountEl = null;   // element we append canvas into (avatar-scroll-safe or canvas-container)
 let rafId = null;
 
-// Prevent double init
+// ---------- CONFIG ----------
+// Change filename to avatar2.glb, avatar3.glb etc to test other models.
+// You can also tweak targetSize / hand amplitude here for quick experiments.
+const CONFIG = {
+  filename: "/assets/avatar1.glb",
+  // smaller targetSize => model appears smaller / zoomed out in viewport
+  targetSize: 1.45,        // tuned to match Replika-like framing (was 2.1)
+  cameraDistanceBias: 0.45, // extra distance to move camera back after fit
+  handBoneNames: [
+    "LeftHand", "RightHand",
+    "leftHand", "rightHand",
+    "hand_l", "hand_r",
+    "Hand_L", "Hand_R",
+    "wrist_l", "wrist_r",
+    "Wrist_L", "Wrist_R",
+    "upperarm_l", "upperarm_r", "shoulder_l", "shoulder_r"
+  ],
+  handIdleAmplitude: 0.04,  // radians (very subtle)
+  handIdleFreq: 1.1,        // oscillation speed
+  breatheAmp: 0.004,        // idle breathing amplitude (small)
+  jawMultiplier: 0.52,      // keep as before
+  jawFreq: 10               // keep as before
+};
+
+// Prevent double init (HMR / page reloads)
 if (!window.__spideyInitialized) {
   window.__spideyInitialized = true;
   if (document.readyState === "loading") {
@@ -33,20 +64,19 @@ function initAvatar() {
     return;
   }
 
-  // allow wrapper to exist: prefer avatar-scroll-safe if present
+  // prefer a wrapper that handles gestures / scrolling
   const wrapper = document.getElementById("avatar-scroll-safe");
   mountEl = wrapper || container;
 
-  // CRITICAL FIXES — these lines reduce scroll-stuck risk and improve touch behavior
+  // reduce scroll-stuck / touch issues
   container.style.touchAction = container.style.touchAction || "pan-y pinch-zoom";
   container.style.position = container.style.position || "relative";
   container.style.userSelect = "none";
 
-  // Renderer setup
+  // Renderer
   renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setPixelRatio(window.devicePixelRatio || 1);
 
-  // set initial size based on mountEl
   if (mountEl) {
     renderer.setSize(mountEl.clientWidth, mountEl.clientHeight);
   } else {
@@ -54,28 +84,26 @@ function initAvatar() {
   }
   renderer.setClearColor(0x000000, 0);
 
-  // Canvas styling — overlay but completely transparent to input
+  // Canvas overlay styling — does not intercept pointer events
   const canvas = renderer.domElement;
   canvas.style.position = "absolute";
   canvas.style.top = canvas.style.left = "0";
   canvas.style.width = canvas.style.height = "100%";
-  canvas.style.pointerEvents = "none"; // mouse/touch passes through by default
+  canvas.style.pointerEvents = "none";
   canvas.style.touchAction = "pan-y pinch-zoom";
   canvas.style.display = "block";
 
-  // Remove any old canvases in both container and wrapper to avoid duplicates (HMR / reload safety)
+  // remove old canvases (HMR safety)
   Array.from(container.querySelectorAll("canvas")).forEach((c) => c.remove());
   if (wrapper) Array.from(wrapper.querySelectorAll("canvas")).forEach((c) => c.remove());
 
-  // Append canvas into wrapper when available (wrapper handles gestures), else container
   if (mountEl) {
     mountEl.appendChild(canvas);
   } else {
     container.appendChild(canvas);
   }
 
-  // tiny reflow nudge so browser recalculates scroll boundaries immediately after mount
-  // (fixes the "top stuck until resize" behavior)
+  // small scroll nudge to fix layout edge cases
   setTimeout(() => {
     try {
       window.scrollBy(0, 1);
@@ -85,9 +113,14 @@ function initAvatar() {
 
   // Scene & Camera
   scene = new THREE.Scene();
-  camera = new THREE.PerspectiveCamera(28, (mountEl ? mountEl.clientWidth : container.clientWidth) / (mountEl ? mountEl.clientHeight : container.clientHeight), 0.1, 100);
+  camera = new THREE.PerspectiveCamera(
+    28,
+    (mountEl ? mountEl.clientWidth : container.clientWidth) / (mountEl ? mountEl.clientHeight : container.clientHeight),
+    0.1,
+    100
+  );
 
-  // Lighting — heroic style (strong key + rim + ambient)
+  // Lighting
   const keyLight = new THREE.DirectionalLight(0xffffff, 1.2);
   keyLight.position.set(2, 3, 4);
   scene.add(keyLight);
@@ -103,9 +136,8 @@ function initAvatar() {
 
   window.addEventListener("resize", onResize, { passive: true });
 
-  loadModel();
+  loadModel(CONFIG.filename);
 
-  // start RAF only once
   if (!rafId) animate();
 }
 
@@ -126,7 +158,6 @@ function disposeAvatar(old) {
         if (node.material) {
           const mats = Array.isArray(node.material) ? node.material : [node.material];
           mats.forEach((m) => {
-            // dispose textures if any
             for (const key in m) {
               const value = m[key];
               if (value && value.isTexture) value.dispose();
@@ -142,18 +173,21 @@ function disposeAvatar(old) {
   }
 }
 
-function loadModel() {
+// loadModel now accepts a filename parameter
+function loadModel(filename) {
   const loader = new GLTFLoader();
+  const path = filename || CONFIG.filename;
+
   loader.load(
-    "/assets/avatar.glb",
+    path,
     (gltf) => {
       try {
-        // dispose old avatar properly
+        // Dispose old avatar if present
         if (avatar) {
           disposeAvatar(avatar);
           avatar = null;
           avatarReady = false;
-          cached = { mouth: null };
+          cached = { mouth: null, leftHand: null, rightHand: null };
         }
 
         avatar = gltf.scene || (gltf.scenes && gltf.scenes[0]) || null;
@@ -162,7 +196,7 @@ function loadModel() {
           return;
         }
 
-        // add but hide until we compute transforms
+        // add but hide until transforms are computed
         avatar.visible = false;
         scene.add(avatar);
 
@@ -172,43 +206,83 @@ function loadModel() {
         const center = box.getCenter(new THREE.Vector3());
         const maxDim = Math.max(size.x, size.y, size.z) || 1;
 
-        // target scale so the model fits nicely in viewport
-        const targetSize = 2.1;
-        const scaleFactor = targetSize / maxDim;
+        // scale using CONFIG.targetSize
+        const scaleFactor = CONFIG.targetSize / maxDim;
         avatar.scale.setScalar(scaleFactor);
 
-        // Explicit, stable centering: set world-position so the model center maps to origin (then offset)
+        // stable centering and slight vertical offset for eye-level
         avatar.position.set(
           -center.x * scaleFactor,
-          -center.y * scaleFactor - 0.07, // slight eye-level offset
+          -center.y * scaleFactor - 0.07,
           -center.z * scaleFactor
         );
 
         // store base Y for non-cumulative animations
         avatar.userData._baseY = avatar.position.y;
 
-        // Camera fit using bounding sphere (robust)
+        // Camera fit using bounding sphere
         const sphere = box.getBoundingSphere(new THREE.Sphere());
         const radius = sphere.radius || Math.max(size.x, size.y, size.z) * 0.5 || 1;
         const fov = THREE.MathUtils.degToRad(camera.fov);
         const distance = Math.abs(radius / Math.sin(fov / 2)) * 1.25;
-        camera.position.set(0, 0, distance + 0.25);
+        // add configurable bias to move camera slightly back (zoom out)
+        camera.position.set(0, 0, distance + (CONFIG.cameraDistanceBias || 0.25));
         camera.lookAt(0, 0, 0);
 
-        // find jaw bone if present
+        // search for jaw bone and hand bones, capture base rotations (non-cumulative)
         avatar.traverse((node) => {
-          if (node.isBone && /jaw|lower/i.test(node.name)) {
-            cached.mouth = node;
-            cached.mouth._baseRotX = node.rotation.x || 0;
+          if (node.isBone) {
+            // jaw detection (existing)
+            if (/jaw|lower/i.test(node.name) && !cached.mouth) {
+              cached.mouth = node;
+              cached.mouth._baseRotX = node.rotation.x || 0;
+            }
+
+            // hand detection: find left and right from common names
+            if (!cached.leftHand && CONFIG.handBoneNames.some(n => new RegExp(n, "i").test(node.name))) {
+              // crude way to separate left/right: look for "l" or "left" in name
+              const lower = node.name.toLowerCase();
+              if (/(left|_l|\.l| l\b| l$)/i.test(lower)) {
+                cached.leftHand = node;
+                cached.leftHand._baseRot = node.rotation.clone ? node.rotation.clone() : { x: node.rotation.x || 0, y: node.rotation.y || 0, z: node.rotation.z || 0 };
+              } else if (/(right|_r|\.r| r\b| r$)/i.test(lower)) {
+                cached.rightHand = node;
+                cached.rightHand._baseRot = node.rotation.clone ? node.rotation.clone() : { x: node.rotation.x || 0, y: node.rotation.y || 0, z: node.rotation.z || 0 };
+              } else {
+                // if name isn't explicit, try to assign first matches heuristically
+                if (!cached.leftHand) {
+                  cached.leftHand = node;
+                  cached.leftHand._baseRot = node.rotation.clone ? node.rotation.clone() : { x: node.rotation.x || 0, y: node.rotation.y || 0, z: node.rotation.z || 0 };
+                } else if (!cached.rightHand) {
+                  cached.rightHand = node;
+                  cached.rightHand._baseRot = node.rotation.clone ? node.rotation.clone() : { x: node.rotation.x || 0, y: node.rotation.y || 0, z: node.rotation.z || 0 };
+                }
+              }
+            }
           }
         });
+
+        // normalize stored base rotation shapes if needed
+        if (cached.leftHand && !cached.leftHand._baseRot) {
+          cached.leftHand._baseRot = { x: cached.leftHand.rotation.x || 0, y: cached.leftHand.rotation.y || 0, z: cached.leftHand.rotation.z || 0 };
+        }
+        if (cached.rightHand && !cached.rightHand._baseRot) {
+          cached.rightHand._baseRot = { x: cached.rightHand.rotation.x || 0, y: cached.rightHand.rotation.y || 0, z: cached.rightHand.rotation.z || 0 };
+        }
+        if (cached.mouth && typeof cached.mouth._baseRotX === "undefined") {
+          cached.mouth._baseRotX = cached.mouth.rotation.x || 0;
+        }
 
         avatar.visible = true;
         avatarReady = true;
         console.log("🕷️ Spidey Teacher Loaded — Perfection Level: 100 🔥", {
+          filename: path,
           scale: avatar.scale.toArray(),
           baseY: avatar.userData._baseY,
-          cameraZ: camera.position.z
+          cameraZ: camera.position.z,
+          hasMouth: !!cached.mouth,
+          hasLeftHand: !!cached.leftHand,
+          hasRightHand: !!cached.rightHand
         });
       } catch (err) {
         console.error("Error in GLTF load callback:", err);
@@ -219,7 +293,7 @@ function loadModel() {
       // console.log(`avatar load ${(xhr.loaded/xhr.total*100).toFixed(1)}%`);
     },
     (err) => {
-      console.error("Failed to load avatar.glb", err);
+      console.error("Failed to load avatar:", path, err);
     }
   );
 }
@@ -229,38 +303,66 @@ function animate() {
   const t = clock.getElapsedTime();
 
   if (avatarReady && avatar) {
-    // base value for vertical offset
+    // base Y
     const baseY = (avatar.userData && typeof avatar.userData._baseY === "number") ? avatar.userData._baseY : avatar.position.y || 0;
 
-    // Ultra-subtle idle breathing amplitude
-    const breathe = Math.sin(t * 1.2) * 0.004;
+    // breathing
+    const breathe = Math.sin(t * 1.2) * (CONFIG.breatheAmp || 0.004);
 
     if (isTalking) {
-      // NON-CUMULATIVE vertical movement relative to base
+      // talking motion (non-cumulative)
       avatar.position.y = baseY + Math.sin(t * 3.0) * 0.007;
       avatar.rotation.x = Math.sin(t * 2.0) * 0.028;
       avatar.rotation.z = Math.sin(t * 1.3) * 0.014;
 
-      // Real jaw sync if bone exists
+      // jaw sync (prefer real bone)
       if (cached.mouth && cached.mouth.isBone) {
-        cached.mouth.rotation.x = cached.mouth._baseRotX + Math.abs(Math.sin(t * 10)) * 0.52;
+        cached.mouth.rotation.x = (cached.mouth._baseRotX || 0) + Math.abs(Math.sin(t * (CONFIG.jawFreq || 10))) * (CONFIG.jawMultiplier || 0.52);
       } else {
-        // fallback (non-destructive): transiently modify scale.y relative to base scale
+        // fallback jaw effect using scale.y (non-destructive)
         const baseScaleX = avatar.scale.x || 1;
-        avatar.scale.y = baseScaleX + Math.abs(Math.sin(t * 10)) * 0.13;
+        avatar.scale.y = baseScaleX + Math.abs(Math.sin(t * (CONFIG.jawFreq || 10))) * 0.13;
       }
     } else {
-      // Idle state (non-cumulative)
+      // idle - breathing + subtle hand wiggle (non-cumulative)
       avatar.position.y = baseY + breathe;
+
+      // gentle damping for rotations to avoid accumulation
       avatar.rotation.x *= 0.93;
       avatar.rotation.z *= 0.93;
 
-      // restore scale.y towards base.x if modified
+      // restore scale.y toward base
       avatar.scale.y += (avatar.scale.x - avatar.scale.y) * 0.12;
 
-      // gently restore jaw bone if used
+      // restore jaw if used
       if (cached.mouth && cached.mouth.isBone && typeof cached.mouth._baseRotX === "number") {
         cached.mouth.rotation.x += (cached.mouth._baseRotX - cached.mouth.rotation.x) * 0.08;
+      }
+
+      // subtle hand idle motion using base rotation + small sine term
+      try {
+        const amp = CONFIG.handIdleAmplitude || 0.04;
+        const freq = CONFIG.handIdleFreq || 1.1;
+        const s = Math.sin(t * freq);
+
+        if (cached.leftHand) {
+          const base = cached.leftHand._baseRot;
+          if (base) {
+            // non-cumulative — set absolute rotation = base + offset
+            cached.leftHand.rotation.x = (base.x || 0) + s * amp * 0.35; // small forward/back tilt
+            cached.leftHand.rotation.z = (base.z || 0) + Math.sin(t * (freq * 0.7)) * amp * 0.15; // slight twist
+          }
+        }
+
+        if (cached.rightHand) {
+          const base = cached.rightHand._baseRot;
+          if (base) {
+            cached.rightHand.rotation.x = (base.x || 0) + Math.sin(t * (freq * 0.95)) * amp * 0.32;
+            cached.rightHand.rotation.z = (base.z || 0) + Math.sin(t * (freq * 0.6)) * amp * 0.12;
+          }
+        }
+      } catch (e) {
+        // ignore transient animation errors
       }
     }
   }
@@ -268,7 +370,7 @@ function animate() {
   if (renderer && scene && camera) renderer.render(scene, camera);
 }
 
-// External API
+// External API (keeps existing interface)
 export function avatarStartTalking() {
   isTalking = true;
   try { document.dispatchEvent(new CustomEvent("avatarTalkStart")); } catch (e) {}
@@ -277,6 +379,13 @@ export function avatarStartTalking() {
 export function avatarStopTalking() {
   isTalking = false;
   try { document.dispatchEvent(new CustomEvent("avatarTalkStop")); } catch (e) {}
+}
+
+// Expose a programmatic loader so you can switch models at runtime:
+// call loadModel('/assets/avatar2.glb') to swap; old avatar is disposed automatically.
+export function loadAvatarFile(path) {
+  if (!path) return;
+  loadModel(path);
 }
 
 // Optional cleanup API (useful in dev/hmr)
