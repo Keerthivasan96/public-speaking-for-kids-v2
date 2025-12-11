@@ -226,7 +226,7 @@ function loadModel(filename) {
         const fov = THREE.MathUtils.degToRad(camera.fov);
         const distance = Math.abs(radius / Math.sin(fov / 2)) * 1.25;
         // add configurable bias to move camera slightly back (zoom out)
-        camera.position.set(0, 0, distance + (CONFIG.cameraDistanceBias || 0.25));
+        camera.position.set(0, 0, distance + (CONFIG.cameraDistanceBias || 1));
         camera.lookAt(0, 0, 0);
 
         // search for jaw bone and hand bones, capture base rotations (non-cumulative)
