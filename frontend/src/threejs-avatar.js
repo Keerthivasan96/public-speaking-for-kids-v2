@@ -25,7 +25,7 @@ let rafId = null;
 // Change filename to avatar2.glb, avatar3.glb etc to test other models.
 // You can also tweak targetSize / hand amplitude here for quick experiments.
 const CONFIG = {
-  filename: "/assets/avatar6.glb",
+  filename: "/assets/avatar7.glb",
   // smaller targetSize => model appears smaller / zoomed out in viewport
   targetSize: 1.45,        // tuned to match Replika-like framing (was 2.1)
   cameraDistanceBias: 0.45, // extra distance to move camera back after fit
