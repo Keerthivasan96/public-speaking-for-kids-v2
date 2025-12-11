@@ -1,48 +1,35 @@
 /* ==========================================================================
-   KIDS3D TEACHER - REPLIKA-INSPIRED UI (MVP - December 2025)
-   30% Replika-style: Chat timeline, friendly companion feel
+   SPIDEY - FULL-SCREEN REPLIKA-STYLE UI (Kids English Companion)
+   Immersive, clean, emotional experience
    ========================================================================== */
 
 :root {
-  /* Replika-inspired color palette */
+  /* Color Palette (Keep current purple/blue theme) */
   --primary: #667eea;
   --primary-dark: #5a67d8;
   --secondary: #764ba2;
   --accent: #f093fb;
   
-  /* Background */
-  --bg-gradient-start: #f8f9fa;
-  --bg-gradient-end: #e9ecef;
+  /* Surfaces */
+  --surface: rgba(255, 255, 255, 0.95);
+  --surface-dark: rgba(0, 0, 0, 0.6);
   
-  /* Panel & surfaces */
-  --surface: #ffffff;
-  --surface-elevated: rgba(255, 255, 255, 0.98);
-  
-  /* Text colors */
+  /* Text */
   --text-primary: #2d3748;
   --text-secondary: #718096;
   --text-light: #a0aec0;
-  
-  /* Message bubbles */
-  --user-bubble: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  --ai-bubble: #f7fafc;
-  --ai-bubble-border: #e2e8f0;
-  
-  /* Status colors */
-  --success: #48bb78;
-  --warning: #ed8936;
-  --error: #f56565;
+  --text-white: #ffffff;
   
   /* Shadows */
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.1);
-  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.07);
-  --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.1);
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.1);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.15);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.2);
   --shadow-hero: 0 20px 60px rgba(102, 126, 234, 0.4);
   
-  /* Border radius */
-  --radius-sm: 8px;
-  --radius-md: 16px;
-  --radius-lg: 24px;
+  /* Radius */
+  --radius-sm: 12px;
+  --radius-md: 20px;
+  --radius-lg: 32px;
   --radius-full: 9999px;
   
   /* Spacing */
@@ -54,7 +41,7 @@
 }
 
 /* ==========================================================================
-   GLOBAL STYLES
+   GLOBAL RESET
    ========================================================================== */
 * {
   box-sizing: border-box;
@@ -63,71 +50,36 @@
 }
 
 html, body {
-  min-height: 100vh;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
-  background: linear-gradient(135deg, var(--bg-gradient-start) 0%, var(--bg-gradient-end) 100%);
-  color: var(--text-primary);
-  overflow-x: hidden;
-  font-size: 16px;
-  line-height: 1.6;
-}
-
-body {
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  padding: var(--space-lg) var(--space-md);
-}
-
-/* ==========================================================================
-   LAYOUT - REPLIKA-STYLE SPLIT
-   ========================================================================== */
-.frame {
-  width: min(1200px, 100%);
-  display: flex;
-  gap: var(--space-lg);
-  margin: 0 auto;
-  align-items: stretch;
-}
-
-.panel {
-  background: var(--surface-elevated);
-  border-radius: var(--radius-lg);
-  padding: var(--space-xl);
-  box-shadow: var(--shadow-lg);
-  backdrop-filter: blur(10px);
-}
-
-/* Left Panel - Avatar Companion */
-.left {
-  width: 50%;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-lg);
-}
-
-/* Right Panel - Chat Timeline */
-.right {
-  width: 50%;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-md);
-  max-height: calc(100vh - 80px);
+  width: 100%;
+  height: 100%;
   overflow: hidden;
+  font-family: 'Nunito', -apple-system, BlinkMacSystemFont, sans-serif;
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
 }
 
 /* ==========================================================================
-   AVATAR CONTAINER - COMPANION STYLE
+   IMMERSIVE CONTAINER (Full Screen)
+   ========================================================================== */
+.immersive-container {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+/* ==========================================================================
+   3D AVATAR CONTAINER (Full Screen Background)
    ========================================================================== */
 #canvas-container {
+  position: absolute;
+  inset: 0;
   width: 100%;
-  height: 480px;
-  border-radius: var(--radius-lg);
-  position: relative;
+  height: 100%;
+  z-index: 1;
   background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
   overflow: visible !important;
-  box-shadow: var(--shadow-hero);
-  margin: 0 auto;
 }
 
 #avatar-scroll-safe {
@@ -148,69 +100,113 @@ body {
 }
 
 /* ==========================================================================
-   CAPTION BOX - REPLIKA STYLE
+   FLOATING CHAT BUBBLE (Bottom Center - Replika Style)
    ========================================================================== */
-.caption-box {
-  position: absolute;
-  bottom: var(--space-lg);
+.chat-bubble {
+  position: fixed;
+  bottom: 180px;
   left: 50%;
   transform: translateX(-50%);
-  width: calc(100% - 60px);
-  max-width: 500px;
-  max-height: 100px;
-  overflow: hidden;
-  background: rgba(255, 255, 255, 0.95);
+  max-width: 600px;
+  width: calc(100% - 64px);
+  z-index: 10;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.chat-bubble.active {
+  opacity: 1;
+  pointer-events: auto;
+  animation: bubbleSlideUp 0.4s ease;
+}
+
+@keyframes bubbleSlideUp {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+.bubble-content {
+  background: var(--surface);
+  padding: var(--space-lg) var(--space-xl);
   border-radius: var(--radius-md);
-  padding: var(--space-md) var(--space-lg);
+  box-shadow: var(--shadow-lg);
+  backdrop-filter: blur(10px);
+  font-size: 18px;
+  line-height: 1.6;
+  color: var(--text-primary);
+  text-align: center;
+  animation: gentleFloat 3s ease-in-out infinite;
+}
+
+@keyframes gentleFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+/* ==========================================================================
+   CAPTION BOX (Speech Display)
+   ========================================================================== */
+.caption-box {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  max-width: 700px;
+  width: calc(100% - 64px);
+  z-index: 15;
+  background: var(--surface);
+  border-radius: var(--radius-md);
+  padding: var(--space-lg) var(--space-xl);
   display: flex;
   align-items: center;
-  gap: var(--space-sm);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
-  z-index: 10;
-  pointer-events: none;
+  gap: var(--space-md);
+  box-shadow: var(--shadow-lg);
   opacity: 0;
+  pointer-events: none;
   transition: opacity 0.3s ease, transform 0.3s ease;
 }
 
 .caption-box.active {
   opacity: 1;
-  animation: slideUp 0.4s ease;
+  animation: captionFadeIn 0.4s ease;
 }
 
-@keyframes slideUp {
+@keyframes captionFadeIn {
   from {
-    transform: translateX(-50%) translateY(20px);
     opacity: 0;
+    transform: translate(-50%, calc(-50% + 20px));
   }
   to {
-    transform: translateX(-50%) translateY(0);
     opacity: 1;
+    transform: translate(-50%, -50%);
   }
 }
 
 .caption-icon {
-  font-size: 20px;
+  font-size: 28px;
   flex-shrink: 0;
 }
 
 .caption-text {
   flex: 1;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.5;
   color: var(--text-primary);
-  font-size: 15px;
-  font-weight: 500;
-  line-height: 1.4;
-  max-height: 70px;
+  max-height: 120px;
   overflow-y: auto;
   overflow-x: hidden;
-  word-wrap: break-word;
 }
 
 .caption-text::-webkit-scrollbar {
   width: 4px;
-}
-
-.caption-text::-webkit-scrollbar-track {
-  background: transparent;
 }
 
 .caption-text::-webkit-scrollbar-thumb {
@@ -224,458 +220,263 @@ body {
 }
 
 .caption-word.highlight {
-  background: rgba(102, 126, 234, 0.2);
+  background: rgba(102, 126, 234, 0.25);
   color: var(--primary-dark);
-  font-weight: 600;
-  border-radius: 4px;
-  padding: 2px 4px;
+  font-weight: 700;
+  border-radius: 6px;
+  padding: 2px 6px;
 }
 
 /* ==========================================================================
-   HERO MIC BUTTON - REPLIKA STYLE
+   HERO MIC BUTTON (Center Bottom)
    ========================================================================== */
-.floating-controls {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: var(--space-md);
-  padding: var(--space-lg);
+.hero-control {
+  position: fixed;
+  bottom: 40px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
 }
 
-.control-btn {
+.hero-mic-btn {
+  width: 160px;
+  height: 160px;
+  border-radius: var(--radius-full);
+  border: none;
+  background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+  color: var(--text-white);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--space-xs);
-  border: none;
-  background: white;
-  border-radius: var(--radius-md);
-  padding: var(--space-md) var(--space-lg);
-  font-family: inherit;
-  font-weight: 600;
-  font-size: 14px;
-  color: var(--text-secondary);
+  gap: var(--space-sm);
   cursor: pointer;
-  transition: all 0.2s ease;
-  box-shadow: var(--shadow-sm);
-}
-
-.control-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
-}
-
-.control-btn .icon {
-  font-size: 24px;
-}
-
-/* Hero Mic Button */
-.mic-btn {
-  width: 140px;
-  height: 140px;
-  border-radius: var(--radius-full);
-  background: var(--user-bubble);
-  color: white;
   box-shadow: var(--shadow-hero);
-  padding: 0;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  font-family: inherit;
 }
 
-.mic-btn:hover {
-  transform: scale(1.05);
+.hero-mic-btn:hover {
+  transform: scale(1.08);
   box-shadow: 0 25px 70px rgba(102, 126, 234, 0.5);
 }
 
-.mic-btn .icon {
-  font-size: 48px;
+.hero-mic-btn:active {
+  transform: scale(1.0);
 }
 
-.mic-btn .label {
-  font-size: 14px;
-  font-weight: 600;
-  color: white;
-  margin-top: var(--space-xs);
+.hero-mic-btn.active {
+  background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+  animation: micPulse 1.5s ease-in-out infinite;
 }
 
-.mic-btn.active {
-  background: linear-gradient(135deg, var(--success) 0%, #38a169 100%);
-  animation: pulse 1.5s ease-in-out infinite;
-}
-
-@keyframes pulse {
+@keyframes micPulse {
   0%, 100% {
     box-shadow: 0 0 0 0 rgba(72, 187, 120, 0.7);
   }
   50% {
-    box-shadow: 0 0 0 20px rgba(72, 187, 120, 0);
+    box-shadow: 0 0 0 30px rgba(72, 187, 120, 0);
   }
 }
 
-.test-btn {
-  background: linear-gradient(135deg, #4299e1 0%, #3182ce 100%);
-  color: white;
+.mic-icon {
+  font-size: 56px;
+  display: block;
+}
+
+.mic-label {
+  font-size: 16px;
+  font-weight: 600;
+  text-transform: none;
 }
 
 /* ==========================================================================
-   STATUS BAR - FRIENDLY MESSAGES
+   STATUS MESSAGE (Top Center)
    ========================================================================== */
-.status-bar {
-  text-align: center;
+.status-message {
+  position: fixed;
+  top: 40px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  background: var(--surface);
+  padding: var(--space-md) var(--space-xl);
+  border-radius: var(--radius-full);
+  box-shadow: var(--shadow-md);
+  font-size: 16px;
   font-weight: 600;
-  font-size: 15px;
   color: var(--text-secondary);
-  padding: var(--space-md);
-  background: rgba(102, 126, 234, 0.08);
-  border-radius: var(--radius-md);
-  border: 2px solid rgba(102, 126, 234, 0.15);
+  text-align: center;
+  max-width: 90%;
+  backdrop-filter: blur(10px);
   transition: all 0.3s ease;
 }
 
 /* ==========================================================================
-   CHAT TIMELINE - REPLIKA STYLE (MAIN FEATURE)
+   MENU TOGGLE (Top Right)
    ========================================================================== */
-.chat-timeline {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-md);
-  padding: var(--space-lg);
-  overflow-y: auto;
-  overflow-x: hidden;
-  background: rgba(255, 255, 255, 0.5);
-  border-radius: var(--radius-md);
-  -webkit-overflow-scrolling: touch;
-  scroll-behavior: smooth;
-}
-
-/* Message Bubbles */
-.message-bubble {
-  display: flex;
-  gap: var(--space-sm);
-  max-width: 75%;
-  animation: fadeInUp 0.3s ease;
-  position: relative;
-}
-
-@keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.message-bubble.user {
-  align-self: flex-end;
-  flex-direction: row-reverse;
-}
-
-.message-bubble.assistant {
-  align-self: flex-start;
-}
-
-/* Avatar Icon */
-.avatar-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-full);
-  background: var(--user-bubble);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 20px;
-  flex-shrink: 0;
-  box-shadow: var(--shadow-sm);
-}
-
-.message-bubble.user .avatar-icon {
-  display: none; /* Hide user avatar, Replika style */
-}
-
-/* Bubble Content */
-.bubble-content {
-  background: white;
-  padding: var(--space-md) var(--space-lg);
-  border-radius: var(--radius-md);
-  font-size: 15px;
-  line-height: 1.5;
-  color: var(--text-primary);
-  box-shadow: var(--shadow-sm);
-  word-wrap: break-word;
-}
-
-.message-bubble.user .bubble-content {
-  background: var(--user-bubble);
-  color: white;
-  border-bottom-right-radius: 4px;
-}
-
-.message-bubble.assistant .bubble-content {
-  background: var(--ai-bubble);
-  border: 1px solid var(--ai-bubble-border);
-  border-bottom-left-radius: 4px;
-}
-
-/* Inline Corrections (Replika style - subtle) */
-.correction-hint {
-  margin-top: var(--space-sm);
-  padding: var(--space-xs) var(--space-sm);
-  background: rgba(72, 187, 120, 0.1);
-  border-left: 3px solid var(--success);
-  border-radius: var(--radius-sm);
-  font-size: 13px;
-  color: var(--success);
-  font-weight: 500;
-}
-
-.correction-hint.perfect {
-  background: rgba(72, 187, 120, 0.15);
-  border-left-color: var(--success);
-  color: var(--success);
-}
-
-/* Timestamp */
-.timestamp {
-  font-size: 11px;
-  color: var(--text-light);
-  margin-top: 4px;
-  text-align: right;
-  padding: 0 var(--space-sm);
-}
-
-.message-bubble.assistant .timestamp {
-  text-align: left;
-}
-
-/* Typing Indicator */
-.typing-indicator {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-}
-
-.typing-dots {
-  display: flex;
-  gap: 4px;
-  padding: var(--space-md);
-}
-
-.typing-dots span {
-  width: 8px;
-  height: 8px;
-  border-radius: var(--radius-full);
-  background: var(--text-light);
-  animation: typing 1.4s infinite;
-}
-
-.typing-dots span:nth-child(2) {
-  animation-delay: 0.2s;
-}
-
-.typing-dots span:nth-child(3) {
-  animation-delay: 0.4s;
-}
-
-@keyframes typing {
-  0%, 60%, 100% {
-    transform: translateY(0);
-    opacity: 0.7;
-  }
-  30% {
-    transform: translateY(-10px);
-    opacity: 1;
-  }
-}
-
-/* ==========================================================================
-   INPUT ROW - REPLIKA STYLE
-   ========================================================================== */
-.input-row {
-  display: flex;
-  gap: var(--space-sm);
-  padding: var(--space-md);
-  background: white;
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
-}
-
-#chatInput {
-  flex: 1;
-  padding: var(--space-md) var(--space-lg);
-  border-radius: var(--radius-full);
-  border: 2px solid var(--ai-bubble-border);
-  font-size: 15px;
-  font-family: inherit;
-  background: var(--ai-bubble);
-  color: var(--text-primary);
-  transition: all 0.2s ease;
-}
-
-#chatInput:focus {
-  outline: none;
-  border-color: var(--primary);
-  background: white;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-}
-
-#chatInput::placeholder {
-  color: var(--text-light);
-}
-
-.send-btn {
-  padding: var(--space-md) var(--space-lg);
+.menu-toggle {
+  position: fixed;
+  top: 40px;
+  right: 40px;
+  z-index: 30;
+  width: 48px;
+  height: 48px;
   border-radius: var(--radius-full);
   border: none;
-  background: var(--user-bubble);
-  color: white;
-  font-weight: 600;
-  font-size: 15px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  box-shadow: var(--shadow-sm);
-  min-width: 80px;
-}
-
-.send-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
-}
-
-.send-btn:active {
-  transform: translateY(0);
-}
-
-/* ==========================================================================
-   ADVANCED MENU (HIDDEN BY DEFAULT)
-   ========================================================================== */
-#menuBtn {
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-full);
-  background: white;
-  border: 2px solid var(--ai-bubble-border);
+  background: var(--surface);
   color: var(--text-secondary);
-  font-size: 20px;
+  font-size: 24px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  box-shadow: var(--shadow-md);
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: all 0.2s ease;
 }
 
-#menuBtn:hover {
-  background: var(--ai-bubble);
+.menu-toggle:hover {
+  background: rgba(255, 255, 255, 1);
   transform: rotate(90deg);
 }
 
-#advancedMenu {
-  position: absolute;
-  top: 50px;
-  right: 0;
-  background: white;
-  border-radius: var(--radius-md);
-  padding: var(--space-sm);
-  box-shadow: var(--shadow-lg);
-  display: none;
-  flex-direction: column;
-  gap: var(--space-xs);
-  min-width: 180px;
+/* ==========================================================================
+   SLIDE-IN MENU PANEL
+   ========================================================================== */
+.menu-panel {
+  position: fixed;
+  top: 0;
+  right: -400px;
+  width: 380px;
+  height: 100%;
   z-index: 100;
+  background: var(--surface);
+  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.2);
+  transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow-y: auto;
 }
 
-#advancedMenu.visible {
+.menu-panel.active {
+  right: 0;
+}
+
+.menu-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+.menu-overlay.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.menu-header {
   display: flex;
-  animation: slideDown 0.2s ease;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-xl);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
 }
 
-@keyframes slideDown {
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+.menu-header h3 {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
 }
 
-#advancedMenu button {
-  padding: var(--space-sm) var(--space-md);
+.menu-close {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-full);
   border: none;
   background: transparent;
-  text-align: left;
-  font-size: 14px;
-  color: var(--text-primary);
-  cursor: pointer;
-  border-radius: var(--radius-sm);
-  transition: background 0.2s ease;
-}
-
-#advancedMenu button:hover {
-  background: var(--ai-bubble);
-}
-
-/* ==========================================================================
-   MODE TOGGLE & CLASS SELECTION (SIMPLIFIED)
-   ========================================================================== */
-.mode-section, .class-section {
-  padding: var(--space-md);
-  background: rgba(102, 126, 234, 0.05);
-  border-radius: var(--radius-md);
-  text-align: center;
-}
-
-.section-title {
-  display: block;
-  font-weight: 600;
-  font-size: 13px;
+  font-size: 32px;
   color: var(--text-secondary);
-  margin-bottom: var(--space-sm);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.menu-close:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.menu-content {
+  padding: var(--space-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.menu-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.menu-item label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
-.mode-toggle {
-  display: inline-flex;
+.menu-hint {
+  font-size: 13px;
+  color: var(--text-light);
+  margin-top: 4px;
+}
+
+/* Mode Toggle Button */
+.mode-toggle-btn {
+  display: flex;
   align-items: center;
-  gap: var(--space-sm);
+  justify-content: space-between;
+  padding: var(--space-md) var(--space-lg);
   background: white;
-  padding: var(--space-sm) var(--space-lg);
-  border-radius: var(--radius-full);
-  border: 2px solid var(--ai-bubble-border);
+  border: 2px solid rgba(0, 0, 0, 0.1);
+  border-radius: var(--radius-md);
   cursor: pointer;
-  transition: all 0.3s ease;
-  box-shadow: var(--shadow-sm);
+  transition: all 0.2s ease;
+  font-family: inherit;
 }
 
-.mode-toggle:hover {
+.mode-toggle-btn:hover {
   border-color: var(--primary);
-  box-shadow: var(--shadow-md);
 }
 
-.mode-text::before {
-  content: "Casual Chat";
+.mode-label {
+  font-size: 15px;
+  font-weight: 600;
   color: var(--text-secondary);
-  font-weight: 500;
 }
 
-.mode-switch {
-  width: 44px;
-  height: 24px;
-  background: var(--ai-bubble-border);
+.mode-toggle-btn.active .mode-label {
+  color: var(--primary);
+}
+
+.toggle-switch {
+  width: 48px;
+  height: 26px;
+  background: rgba(0, 0, 0, 0.1);
   border-radius: var(--radius-full);
   position: relative;
   transition: 0.3s;
 }
 
-.mode-switch::after {
+.toggle-switch::after {
   content: "";
   position: absolute;
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   background: white;
   border-radius: var(--radius-full);
   top: 2px;
@@ -684,239 +485,133 @@ body {
   box-shadow: var(--shadow-sm);
 }
 
-#modeToggle.active {
-  border-color: var(--primary);
-}
-
-#modeToggle.active .mode-text::before {
-  content: "Practice Mode";
-  color: var(--primary);
-  font-weight: 600;
-}
-
-#modeToggle.active .mode-switch {
+.mode-toggle-btn.active .toggle-switch {
   background: var(--primary);
 }
 
-#modeToggle.active .mode-switch::after {
-  left: 22px;
+.mode-toggle-btn.active .toggle-switch::after {
+  left: 24px;
 }
 
-.mode-description {
-  margin-top: var(--space-xs);
-  font-size: 12px;
-  color: var(--text-light);
-}
-
-/* Class Buttons */
-.class-buttons {
-  display: flex;
-  gap: var(--space-sm);
-  justify-content: center;
-  margin-top: var(--space-sm);
-}
-
-.class-btn {
-  padding: var(--space-sm) var(--space-lg);
-  border-radius: var(--radius-full);
-  background: white;
-  border: 2px solid var(--ai-bubble-border);
-  font-weight: 600;
-  font-size: 14px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  color: var(--text-secondary);
-}
-
-.class-btn:hover {
-  border-color: var(--primary);
-  transform: translateY(-2px);
-}
-
-.class-btn.active {
-  background: var(--user-bubble);
-  color: white;
-  border-color: transparent;
-}
-
-/* ==========================================================================
-   ACTION BUTTONS
-   ========================================================================== */
-.action-buttons {
-  display: flex;
-  gap: var(--space-sm);
-}
-
-.action-btn {
-  flex: 1;
+/* Menu Action Buttons */
+.menu-action-btn {
+  width: 100%;
   padding: var(--space-md);
+  background: rgba(102, 126, 234, 0.08);
+  border: 2px solid rgba(102, 126, 234, 0.15);
   border-radius: var(--radius-md);
-  border: 2px solid var(--ai-bubble-border);
-  background: white;
+  font-size: 15px;
   font-weight: 600;
-  font-size: 14px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  color: var(--text-secondary);
-}
-
-.action-btn:hover {
-  border-color: var(--primary);
   color: var(--primary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: inherit;
+  text-align: left;
+}
+
+.menu-action-btn:hover {
+  background: rgba(102, 126, 234, 0.12);
+  border-color: var(--primary);
   transform: translateY(-2px);
 }
 
-/* ==========================================================================
-   LOG SECTION (MINIMIZED)
-   ========================================================================== */
-.log-section {
-  padding: var(--space-md);
-  background: rgba(0, 0, 0, 0.02);
-  border-radius: var(--radius-md);
-}
-
-.log-content {
-  margin-top: var(--space-xs);
-  font-size: 12px;
-  color: var(--text-light);
-  max-height: 80px;
-  overflow-y: auto;
-  padding: var(--space-xs);
-  background: white;
-  border-radius: var(--radius-sm);
-  line-height: 1.4;
-}
-
-/* ==========================================================================
-   TYPOGRAPHY
-   ========================================================================== */
-h1 {
-  font-size: 28px;
-  font-weight: 700;
-  text-align: center;
-  color: var(--text-primary);
-  margin-bottom: var(--space-xs);
-}
-
-.subtitle {
-  text-align: center;
-  font-weight: 500;
+/* Debug Log */
+details summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
   color: var(--text-secondary);
-  font-size: 14px;
-  margin-bottom: var(--space-lg);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: var(--space-sm);
 }
 
-.small, footer {
+.debug-log {
+  margin-top: var(--space-sm);
+  padding: var(--space-md);
+  background: rgba(0, 0, 0, 0.03);
+  border-radius: var(--radius-sm);
   font-size: 12px;
   color: var(--text-light);
-  text-align: center;
-  margin-top: auto;
-  padding-top: var(--space-md);
-  line-height: 1.4;
-}
-
-/* ==========================================================================
-   SCROLLBAR STYLING
-   ========================================================================== */
-.chat-timeline::-webkit-scrollbar,
-.right::-webkit-scrollbar,
-.log-content::-webkit-scrollbar {
-  width: 6px;
-}
-
-.chat-timeline::-webkit-scrollbar-track,
-.right::-webkit-scrollbar-track,
-.log-content::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.chat-timeline::-webkit-scrollbar-thumb,
-.right::-webkit-scrollbar-thumb,
-.log-content::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.15);
-  border-radius: 10px;
-}
-
-.chat-timeline::-webkit-scrollbar-thumb:hover,
-.right::-webkit-scrollbar-thumb:hover,
-.log-content::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 0, 0, 0.25);
+  max-height: 200px;
+  overflow-y: auto;
+  line-height: 1.5;
+  font-family: monospace;
 }
 
 /* ==========================================================================
    RESPONSIVE DESIGN
    ========================================================================== */
-@media (max-width: 1000px) {
-  .frame {
-    flex-direction: column;
+@media (max-width: 768px) {
+  .hero-mic-btn {
+    width: 140px;
+    height: 140px;
   }
   
-  .left, .right {
+  .mic-icon {
+    font-size: 48px;
+  }
+  
+  .mic-label {
+    font-size: 14px;
+  }
+  
+  .chat-bubble {
+    bottom: 160px;
+  }
+  
+  .bubble-content {
+    font-size: 16px;
+    padding: var(--space-md) var(--space-lg);
+  }
+  
+  .caption-box {
+    padding: var(--space-md) var(--space-lg);
+  }
+  
+  .caption-text {
+    font-size: 17px;
+  }
+  
+  .status-message {
+    top: 20px;
+    font-size: 14px;
+    padding: var(--space-sm) var(--space-lg);
+  }
+  
+  .menu-toggle {
+    top: 20px;
+    right: 20px;
+    width: 44px;
+    height: 44px;
+  }
+  
+  .menu-panel {
     width: 100%;
+    right: -100%;
   }
-  
-  #canvas-container {
-    height: 400px;
-  }
-  
-  .mic-btn {
+}
+
+@media (max-width: 480px) {
+  .hero-mic-btn {
     width: 120px;
     height: 120px;
   }
   
-  .mic-btn .icon {
+  .mic-icon {
     font-size: 40px;
   }
   
-  .chat-timeline {
-    max-height: 400px;
-  }
-}
-
-@media (max-width: 640px) {
-  body {
-    padding: var(--space-sm);
+  .mic-label {
+    font-size: 13px;
   }
   
-  .panel {
-    padding: var(--space-lg);
-  }
-  
-  #canvas-container {
-    height: 320px;
-  }
-  
-  .mic-btn {
-    width: 100px;
-    height: 100px;
-  }
-  
-  .mic-btn .icon {
-    font-size: 36px;
-  }
-  
-  .mic-btn .label {
-    font-size: 12px;
-  }
-  
-  .message-bubble {
-    max-width: 85%;
-  }
-  
-  h1 {
-    font-size: 24px;
+  .chat-bubble {
+    bottom: 140px;
+    width: calc(100% - 40px);
   }
   
   .caption-box {
-    max-width: calc(100% - 32px);
-  }
-  
-  .class-buttons {
-    flex-wrap: wrap;
-  }
-  
-  .class-btn {
-    padding: var(--space-xs) var(--space-md);
-    font-size: 13px;
+    width: calc(100% - 40px);
   }
 }
