@@ -1,22 +1,22 @@
 // frontend/src/threejs-avatar.js
-// REPLIKA-STYLE AVATAR - STILL & NATURAL
-// Minimal movement | Jaw/lip sync only | No shaking
+// COMPLETELY STILL AVATAR - REPLIKA STYLE
+// Zero movement | No jaw animation | Perfectly idle
 
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 let scene, camera, renderer, avatar;
 let avatarReady = false;
-let isTalking = false;
+let isTalking = false; // Keep for future use, but not used now
 const clock = new THREE.Clock();
-let cached = { mouth: null, head: null };
 let container = null;
 let mountEl = null;
 let rafId = null;
 
-// Base rotation storage (to prevent cumulative drift)
-let baseRotation = { x: 0, y: 0, z: 0 };
+// Base position storage (never changes)
 let basePosition = { x: 0, y: 0, z: 0 };
+let baseRotation = { x: 0, y: 0, z: 0 };
+let baseScale = { x: 1, y: 1, z: 1 };
 
 // Prevent double init
 if (!window.__spideyInitialized) {
@@ -93,7 +93,7 @@ function initAvatar() {
     100
   );
 
-  // LIGHTING - Soft and natural (like Replika)
+  // LIGHTING - Soft and natural
   const keyLight = new THREE.DirectionalLight(0xffffff, 1.0);
   keyLight.position.set(2, 3, 4);
   scene.add(keyLight);
@@ -156,7 +156,6 @@ function loadModel() {
           disposeAvatar(avatar);
           avatar = null;
           avatarReady = false;
-          cached = { mouth: null, head: null };
         }
 
         avatar = gltf.scene || (gltf.scenes && gltf.scenes[0]) || null;
@@ -186,7 +185,7 @@ function loadModel() {
           -center.z * scaleFactor
         );
 
-        // Store base position and rotation
+        // Store FIXED base values (NEVER change these)
         basePosition.x = avatar.position.x;
         basePosition.y = avatar.position.y;
         basePosition.z = avatar.position.z;
@@ -194,6 +193,10 @@ function loadModel() {
         baseRotation.x = avatar.rotation.x;
         baseRotation.y = avatar.rotation.y;
         baseRotation.z = avatar.rotation.z;
+
+        baseScale.x = avatar.scale.x;
+        baseScale.y = avatar.scale.y;
+        baseScale.z = avatar.scale.z;
 
         // Camera positioning
         const sphere = box.getBoundingSphere(new THREE.Sphere());
@@ -203,38 +206,12 @@ function loadModel() {
         camera.position.set(0, 0, distance + 0.25);
         camera.lookAt(0, 0, 0);
 
-        // Find jaw/mouth bone for lip sync
-        avatar.traverse((node) => {
-          const nodeName = (node.name || "").toLowerCase();
-          
-          // Look for jaw/mouth bones
-          if (node.isBone) {
-            if (nodeName.includes("jaw") || 
-                nodeName.includes("chin") || 
-                nodeName.includes("mouth") ||
-                nodeName.includes("lower")) {
-              cached.mouth = node;
-              cached.mouth._baseRotX = node.rotation.x || 0;
-              console.log("Found mouth bone:", node.name);
-            }
-            
-            // Store head bone for minimal movement
-            if (nodeName.includes("head") && !cached.head) {
-              cached.head = node;
-              cached.head._baseRotX = node.rotation.x || 0;
-              cached.head._baseRotY = node.rotation.y || 0;
-              cached.head._baseRotZ = node.rotation.z || 0;
-              console.log("Found head bone:", node.name);
-            }
-          }
-        });
-
         avatar.visible = true;
         avatarReady = true;
-        console.log("✨ Avatar Loaded - Replika Style", {
-          scale: avatar.scale.toArray(),
-          hasJaw: !!cached.mouth,
-          hasHead: !!cached.head
+        console.log("✨ Avatar Loaded - Completely Still", {
+          position: avatar.position.toArray(),
+          rotation: avatar.rotation.toArray(),
+          scale: avatar.scale.toArray()
         });
       } catch (err) {
         console.error("Error in GLTF load callback:", err);
@@ -242,78 +219,47 @@ function loadModel() {
     },
     undefined,
     (err) => {
-      console.error("Failed to load avatar.glb", err);
+      console.error("Failed to load avatar2.glb", err);
     }
   );
 }
 
 function animate() {
   rafId = requestAnimationFrame(animate);
-  const t = clock.getElapsedTime();
 
+  // CRITICAL: Avatar NEVER moves - always locked to base values
   if (avatarReady && avatar) {
-    if (isTalking) {
-      // TALKING STATE - Only jaw/lip movement
-      
-      // Jaw movement (if bone exists)
-      if (cached.mouth && cached.mouth.isBone) {
-        // Natural jaw motion - opens and closes smoothly
-        const jawOpen = Math.abs(Math.sin(t * 8)) * 0.3; // 8 Hz for natural speech
-        cached.mouth.rotation.x = cached.mouth._baseRotX + jawOpen;
-      }
-      
-      // Very subtle head movement (optional - can be removed)
-      if (cached.head && cached.head.isBone) {
-        const headTilt = Math.sin(t * 1.5) * 0.015; // Very minimal
-        cached.head.rotation.x = cached.head._baseRotX + headTilt;
-      }
-      
-      // Fallback: scale-based "mouth" animation if no jaw bone
-      if (!cached.mouth) {
-        const scaleVariation = Math.abs(Math.sin(t * 8)) * 0.05;
-        avatar.scale.y = avatar.scale.x + scaleVariation;
-      }
-      
-    } else {
-      // IDLE STATE - Completely still (like Replika)
-      
-      // Reset avatar to base position (no drift)
-      avatar.position.x = basePosition.x;
-      avatar.position.y = basePosition.y;
-      avatar.position.z = basePosition.z;
-      
-      avatar.rotation.x = baseRotation.x;
-      avatar.rotation.y = baseRotation.y;
-      avatar.rotation.z = baseRotation.z;
-      
-      // Reset jaw to base
-      if (cached.mouth && cached.mouth.isBone) {
-        cached.mouth.rotation.x += (cached.mouth._baseRotX - cached.mouth.rotation.x) * 0.1;
-      }
-      
-      // Reset head to base
-      if (cached.head && cached.head.isBone) {
-        cached.head.rotation.x += (cached.head._baseRotX - cached.head.rotation.x) * 0.1;
-        cached.head.rotation.y += (cached.head._baseRotY - cached.head.rotation.y) * 0.1;
-        cached.head.rotation.z += (cached.head._baseRotZ - cached.head.rotation.z) * 0.1;
-      }
-      
-      // Reset scale
-      if (avatar.scale.y !== avatar.scale.x) {
-        avatar.scale.y += (avatar.scale.x - avatar.scale.y) * 0.1;
-      }
-    }
+    // Force avatar to stay EXACTLY at base position/rotation/scale
+    // No animations, no breathing, no movement of any kind
+    
+    avatar.position.x = basePosition.x;
+    avatar.position.y = basePosition.y;
+    avatar.position.z = basePosition.z;
+    
+    avatar.rotation.x = baseRotation.x;
+    avatar.rotation.y = baseRotation.y;
+    avatar.rotation.z = baseRotation.z;
+    
+    avatar.scale.x = baseScale.x;
+    avatar.scale.y = baseScale.y;
+    avatar.scale.z = baseScale.z;
+
+    // NO jaw movement
+    // NO head movement
+    // NO body movement
+    // COMPLETELY STATIC - like a photo
   }
 
   if (renderer && scene && camera) renderer.render(scene, camera);
 }
 
-// External API
+// External API - kept for compatibility but doesn't affect avatar
 export function avatarStartTalking() {
   isTalking = true;
   try { 
     document.dispatchEvent(new CustomEvent("avatarTalkStart")); 
   } catch (e) {}
+  // Avatar stays completely still even when "talking"
 }
 
 export function avatarStopTalking() {
@@ -349,54 +295,3 @@ export function disposeAllAndStop() {
     console.warn("disposeAllAndStop error:", e);
   }
 }
-
-/* ============================
-   ADVANCED: Viseme-based Lip Sync
-   ============================ */
-
-// Phoneme to viseme mapping (for advanced lip sync)
-const VISEME_MAP = {
-  // Silence
-  'sil': 0,
-  // Vowels
-  'AA': 0.8, 'AE': 0.7, 'AH': 0.6, 'AO': 0.8, 'AW': 0.7,
-  'AY': 0.6, 'EH': 0.5, 'ER': 0.4, 'EY': 0.5, 'IH': 0.3,
-  'IY': 0.3, 'OW': 0.7, 'OY': 0.7, 'UH': 0.5, 'UW': 0.6,
-  // Consonants
-  'M': 0.0, 'P': 0.0, 'B': 0.1, 'F': 0.2, 'V': 0.2,
-  'TH': 0.3, 'DH': 0.3, 'S': 0.2, 'Z': 0.2, 'SH': 0.3,
-  'CH': 0.3, 'JH': 0.3, 'T': 0.2, 'D': 0.2, 'N': 0.2,
-  'L': 0.3, 'R': 0.4, 'K': 0.4, 'G': 0.4, 'NG': 0.3,
-  'W': 0.5, 'Y': 0.4, 'HH': 0.3
-};
-
-// Simple phoneme detection (basic - for real visemes use Web Speech API or external library)
-export function animateVisemes(text) {
-  if (!cached.mouth || !cached.mouth.isBone) return;
-  
-  // This is a simplified version - for production, use a phoneme library
-  // or the Web Speech API's word boundary events
-  const words = text.toLowerCase().split(' ');
-  let delay = 0;
-  
-  words.forEach(word => {
-    const duration = word.length * 80; // Rough estimate
-    
-    setTimeout(() => {
-      if (isTalking && cached.mouth) {
-        // Estimate mouth opening based on vowels
-        const vowelCount = (word.match(/[aeiou]/g) || []).length;
-        const openAmount = Math.min(vowelCount * 0.15, 0.4);
-        cached.mouth.rotation.x = cached.mouth._baseRotX + openAmount;
-      }
-    }, delay);
-    
-    delay += duration;
-  });
-}
-
-// Note: For real viseme-based lip sync, you would:
-// 1. Use a phoneme analysis library (like meyda.js or ml5.js)
-// 2. Or integrate with services like Azure Speech or AWS Polly
-// 3. Map phonemes to blend shapes if your model has them
-// 4. Or use the simplified jaw rotation as shown above
