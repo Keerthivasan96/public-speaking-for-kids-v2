@@ -1,5 +1,5 @@
-// Spidey - Full-Screen Replika-Style Companion (Kids English Learning)
-// Simplified, immersive, emotional experience
+// Spidey - Continuous Conversation Mode (Replika-style)
+// Full-Screen Companion with hands-free conversation
 
 import { startListening, stopListening } from "./speech.js";
 import { avatarStartTalking, avatarStopTalking } from "./threejs-avatar.js";
@@ -12,7 +12,7 @@ function isMobileDevice() {
 }
 
 /* -------------------------
-   UI ELEMENTS (grab DOM)
+   UI ELEMENTS
    ------------------------- */
 const micBtn = document.getElementById("micBtn");
 const menuToggle = document.getElementById("menuToggle");
@@ -29,7 +29,6 @@ const logEl = document.getElementById("log");
 const captionBox = document.getElementById("caption-box");
 const captionText = document.getElementById("caption-text");
 
-// compact caption & mic container (new)
 const micContainer = document.getElementById("mic-container");
 const chatCaption = document.getElementById("chatCaption");
 
@@ -41,6 +40,7 @@ const bubbleText = document.getElementById("bubbleText");
    ============================ */
 let isListening = false;
 let isSpeaking = false;
+let isContinuousMode = false; // NEW: Continuous conversation flag
 let lastSpokenText = "";
 let conversationHistory = [];
 let isPracticeMode = false;
@@ -110,26 +110,9 @@ function clearConversationStorage() {
 function extractTopics(messages) {
   const topics = new Set();
   const keywords = [
-    "family",
-    "friend",
-    "school",
-    "teacher",
-    "cricket",
-    "football",
-    "movie",
-    "food",
-    "pet",
-    "dog",
-    "cat",
-    "favorite",
-    "yesterday",
-    "tomorrow",
-    "weekend",
-    "exam",
-    "test",
-    "game",
-    "phone",
-    "computer",
+    "family", "friend", "school", "teacher", "cricket", "football",
+    "movie", "food", "pet", "dog", "cat", "favorite", "yesterday",
+    "tomorrow", "weekend", "exam", "test", "game", "phone", "computer"
   ];
 
   messages.forEach(function (msg) {
@@ -154,7 +137,7 @@ function generateConversationSummary() {
 }
 
 /* ============================
-   CAPTION / SUBTITLE FUNCTIONS
+   CAPTION FUNCTIONS (UPDATED)
    ============================ */
 function chunkText(text, maxChars) {
   maxChars = maxChars || CAPTION_CHAR_LIMIT;
@@ -176,7 +159,6 @@ function chunkText(text, maxChars) {
 }
 
 function showCaption(text) {
-  // full caption box (existing large caption)
   if (!captionBox || !captionText) return;
 
   captionChunks = chunkText(text, CAPTION_CHAR_LIMIT);
@@ -195,7 +177,7 @@ function displayCaptionChunk(index) {
   const words = chunk.split(" ");
   const wordsHTML = words
     .map(function (word, i) {
-      return '<span class="caption-word" data-index="' + i + "'>" + escapeHtml(word) + "</span>";
+      return '<span class="caption-word" data-index="' + i + '">' + escapeHtml(word) + "</span>";
     })
     .join(" ");
 
@@ -234,36 +216,30 @@ function hideCaption() {
 }
 
 /* -------------------------
-   Compact / Replika-style caption (new)
+   Compact caption (NEW: stays until TTS ends)
    ------------------------- */
-/**
- * showCaptionText(text)
- * - uses #chatCaption (compact element)
- * - auto hides after 4200ms
- */
 export function showCaptionText(text) {
   if (!chatCaption) return;
   chatCaption.textContent = text;
   chatCaption.classList.add("active");
-
+  
+  // Clear any existing timer
   clearTimeout(window.__captionHideTimer);
-  window.__captionHideTimer = setTimeout(() => {
-    chatCaption.classList.remove("active");
-  }, 4200);
+  // Caption will be hidden when TTS ends (in speak function)
+}
+
+function hideCaptionText() {
+  if (!chatCaption) return;
+  chatCaption.classList.remove("active");
+  clearTimeout(window.__captionHideTimer);
 }
 
 /* ============================
-   CHAT BUBBLE
+   CHAT BUBBLE (REMOVED - no user transcript display)
    ============================ */
 function showChatBubble(text) {
-  if (!chatBubble || !bubbleText) return;
-
-  bubbleText.textContent = text;
-  chatBubble.classList.add("active");
-
-  setTimeout(function () {
-    hideChatBubble();
-  }, 5000);
+  // Disabled - we don't show user's spoken text anymore
+  return;
 }
 
 function hideChatBubble() {
@@ -278,11 +254,11 @@ function setStatus(message, type) {
   if (!statusEl) return;
 
   const friendlyMessages = {
-    ready: "Hey friend! Ready to chat? 👋",
+    ready: "Ready to chat! 💭",
     listening: "I'm listening... 👂",
-    thinking: "Hmm, let me think... 🤔",
-    speaking: "Here's what I think... 💬",
-    error: "Oops! Lost connection for a sec 😅",
+    thinking: "Thinking... 🤔",
+    speaking: "💬",
+    error: "Connection issue 😅",
   };
 
   statusEl.textContent = friendlyMessages[type] || message;
@@ -307,28 +283,35 @@ function renderReplyMarkdown(md) {
 }
 
 /* ============================
-   PROMPT BUILDER
+   IMPROVED PROMPT BUILDER
    ============================ */
 function buildPrompt(userText) {
   const modeInstruction = isPracticeMode
-    ? "PRACTICE MODE: Gently correct errors and show the right way in quotes. Be encouraging!"
-    : "CASUAL CHAT MODE: Be a fun, supportive friend! Only mention big mistakes. Keep it light and friendly!";
+    ? "Practice mode: If you notice a grammar mistake, gently mention it once and show the correct way. Keep it encouraging."
+    : "Casual chat: Be a supportive friend. Only mention major errors if they hurt clarity. Stay natural and warm.";
 
-  const toneGuide = "Teen-friendly, clear, relatable. Medium responses (40-60 words). Cool and supportive!";
+  const toneGuide = "Speak like a caring 16-year-old friend. Keep replies short (30-50 words). Be genuine, not repetitive. No catchphrases.";
 
   const history = conversationHistory.slice(-20).map(function (m) {
-    return (m.role === "user" ? "Student" : "Spidey") + ": " + m.content;
+    return (m.role === "user" ? "Student" : "Friend") + ": " + m.content;
   }).join("\n");
 
   const summary = generateConversationSummary();
 
-  return "You are Spidey, a friendly English learning companion for kids (ages 10-15).\n\n" +
-    modeInstruction + "\n\n" +
-    toneGuide + "\n\n" +
-    "Context: You've been chatting with this student for " + conversationHistory.length + " messages. " + summary + "\n\n" +
-    "Recent conversation:\n" + (history || "(First message)") + "\n\n" +
-    "Student: \"" + userText + "\"\n\n" +
-    "Respond as a supportive friend, not a formal teacher. Keep it 40-60 words. If correcting, put the correct sentence in quotes.";
+  return `You are a friendly English conversation companion for teens (12-15 years old).
+
+${modeInstruction}
+
+${toneGuide}
+
+Context: You've had ${conversationHistory.length} exchanges. ${summary}
+
+Recent chat:
+${history || "(First message)"}
+
+Student: "${userText}"
+
+Reply naturally in 30-50 words. Be warm, not robotic. Vary your responses.`;
 }
 
 /* ============================
@@ -376,47 +359,38 @@ function selectBestVoice() {
     return null;
   }
 
+  // Priority 1: Female Indian English voices (age-appropriate)
+  const femaleIndian = voices.filter(function (v) {
+    return v.lang.startsWith("en-IN") && /female|woman|girl/i.test(v.name);
+  });
+
+  if (femaleIndian.length > 0) {
+    log("Using voice: " + femaleIndian[0].name);
+    return femaleIndian[0];
+  }
+
+  // Priority 2: Any Indian English voice
   const indianVoices = voices.filter(function (v) {
     return v.lang.startsWith("en-IN");
   });
 
   if (indianVoices.length > 0) {
-    const femaleIndian = indianVoices.find(function (v) {
-      return /female|woman|girl/i.test(v.name);
-    });
-    if (femaleIndian) {
-      log("Using voice: " + femaleIndian.name);
-      return femaleIndian;
-    }
     log("Using voice: " + indianVoices[0].name);
     return indianVoices[0];
   }
 
-  const englishVoices = voices.filter(function (v) {
-    return v.lang.startsWith("en-US") || v.lang.startsWith("en-GB");
+  // Priority 3: Female English voices (US/GB)
+  const femaleEnglish = voices.filter(function (v) {
+    return (v.lang.startsWith("en-US") || v.lang.startsWith("en-GB")) && 
+           /female|woman|girl|samantha|victoria|zira|fiona/i.test(v.name);
   });
 
-  if (englishVoices.length > 0) {
-    const premium = englishVoices.find(function (v) {
-      return /premium|enhanced|natural|google|microsoft/i.test(v.name);
-    });
-    if (premium) {
-      log("Using voice: " + premium.name);
-      return premium;
-    }
-
-    const female = englishVoices.find(function (v) {
-      return /female|woman|girl|samantha|victoria|zira/i.test(v.name);
-    });
-    if (female) {
-      log("Using voice: " + female.name);
-      return female;
-    }
-
-    log("Using voice: " + englishVoices[0].name);
-    return englishVoices[0];
+  if (femaleEnglish.length > 0) {
+    log("Using voice: " + femaleEnglish[0].name);
+    return femaleEnglish[0];
   }
 
+  // Priority 4: Any English voice
   const anyEnglish = voices.find(function (v) {
     return v.lang.startsWith("en");
   });
@@ -431,7 +405,7 @@ function selectBestVoice() {
 }
 
 /* ============================
-   TTS (speak / stop)
+   TTS (UPDATED: caption stays until end)
    ============================ */
 function speak(text) {
   if (!text || !text.trim()) return;
@@ -446,11 +420,11 @@ function speak(text) {
 
   if (isMobileDevice()) {
     utter.rate = 0.9;
-    utter.pitch = 1.0;
+    utter.pitch = 1.1; // Slightly higher for younger voice
     utter.volume = 1;
   } else {
     utter.rate = 0.95;
-    utter.pitch = 1.25;
+    utter.pitch = 1.2; // Teen-friendly pitch
     utter.volume = 1;
   }
 
@@ -467,13 +441,11 @@ function speak(text) {
     isSpeaking = true;
     if (avatarStartTalking) avatarStartTalking();
 
-    // use the compact caption for quick overlay
+    // Show caption - it will stay until TTS ends
     showCaptionText(cleanedText);
+    showCaption(cleanedText);
 
-    // also optionally show full caption box for accessibility (comment out if not needed)
-    // showCaption(cleanedText);
-
-    setStatus("Here's what I think... 💬", "speaking");
+    setStatus("💬", "speaking");
     log("Speech started");
 
     highlightInterval = setInterval(function () {
@@ -520,8 +492,17 @@ function speak(text) {
     isSpeaking = false;
     if (avatarStopTalking) avatarStopTalking();
     hideCaption();
+    hideCaptionText(); // Hide caption when speech ends
 
-    setStatus("Your turn, friend! 👋", "ready");
+    // NEW: If continuous mode is on, restart listening
+    if (isContinuousMode) {
+      setTimeout(function() {
+        startNextListeningCycle();
+      }, 800); // Small pause before listening again
+    } else {
+      setStatus("Your turn! 💭", "ready");
+    }
+
     log("Speech ended");
   };
 
@@ -532,8 +513,16 @@ function speak(text) {
     isSpeaking = false;
     if (avatarStopTalking) avatarStopTalking();
     hideCaption();
+    hideCaptionText();
 
-    setStatus("Oops! Lost my voice for a sec 😅", "error");
+    setStatus("Connection issue 😅", "error");
+    
+    // Retry continuous mode after error
+    if (isContinuousMode) {
+      setTimeout(function() {
+        startNextListeningCycle();
+      }, 1500);
+    }
   };
 
   window.speechSynthesis.speak(utter);
@@ -545,8 +534,37 @@ function stopSpeech() {
   isSpeaking = false;
   if (avatarStopTalking) avatarStopTalking();
   hideCaption();
+  hideCaptionText();
 
   log("Speech stopped");
+}
+
+/* ============================
+   CONTINUOUS CONVERSATION LOGIC
+   ============================ */
+function startNextListeningCycle() {
+  if (!isContinuousMode || isSpeaking) return;
+
+  setStatus("I'm listening... 👂", "listening");
+  isListening = true;
+  startListening(handleUserSpeech, { continuous: false });
+}
+
+function handleUserSpeech(text) {
+  if (!text || !text.trim()) {
+    // If no speech detected, restart listening in continuous mode
+    if (isContinuousMode) {
+      setTimeout(function() {
+        startNextListeningCycle();
+      }, 500);
+    }
+    return;
+  }
+
+  log("User said: " + text);
+  
+  // Don't show user transcript on screen anymore
+  sendToBackend(text);
 }
 
 /* ============================
@@ -558,8 +576,7 @@ async function sendToBackend(text) {
   conversationHistory.push({ role: "user", content: text });
   saveConversationHistory();
 
-  showChatBubble(text);
-  setStatus("Hmm, let me think... 🤔", "thinking");
+  setStatus("Thinking... 🤔", "thinking");
 
   try {
     const res = await fetch(API_URL, {
@@ -567,8 +584,8 @@ async function sendToBackend(text) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         prompt: buildPrompt(text),
-        temperature: 0.35,
-        max_tokens: 200,
+        temperature: 0.4, // Slightly higher for more natural variety
+        max_tokens: 120, // Shorter replies
       }),
     });
 
@@ -577,7 +594,7 @@ async function sendToBackend(text) {
     }
 
     const data = await res.json();
-    const reply = data.reply || "Great job! Keep practicing!";
+    const reply = data.reply || "I'm here for you!";
 
     conversationHistory.push({ role: "assistant", content: reply });
     saveConversationHistory();
@@ -587,8 +604,8 @@ async function sendToBackend(text) {
   } catch (err) {
     console.error("Backend error:", err);
 
-    showChatBubble("Oops! I lost connection for a moment. Can you try again? 😅");
-    setStatus("Oops! Lost connection for a sec 😅", "error");
+    setStatus("Connection issue 😅", "error");
+    speak("Sorry, I lost connection. Can you say that again?");
   }
 }
 
@@ -635,28 +652,33 @@ if (modeToggle) {
   });
 }
 
-// Mic Button
+// Mic Button (UPDATED: toggles continuous mode)
 if (micBtn) {
   micBtn.addEventListener("click", function () {
-    if (isListening) {
+    if (isContinuousMode) {
+      // Stop continuous mode
+      isContinuousMode = false;
       stopListening();
+      stopSpeech();
       isListening = false;
 
-      micBtn.classList.remove("active");
-      const label = micBtn.querySelector(".mic-label");
-      if (label) label.textContent = "Talk to Spidey";
+      micBtn.classList.remove("active", "recording");
+      micBtn.textContent = "🎤";
+      micBtn.title = "Start conversation";
 
-      setStatus("Your turn, friend! 👋", "ready");
+      setStatus("Paused 💭", "ready");
+      log("Continuous mode stopped");
     } else {
-      stopSpeech();
-      isListening = true;
-
+      // Start continuous mode
+      isContinuousMode = true;
       micBtn.classList.add("active");
-      const label = micBtn.querySelector(".mic-label");
-      if (label) label.textContent = "Stop";
+      micBtn.textContent = "⏸️";
+      micBtn.title = "Pause conversation";
 
       setStatus("I'm listening... 👂", "listening");
-      startListening(sendToBackend);
+      log("Continuous mode started");
+      
+      startNextListeningCycle();
     }
   });
 }
@@ -670,12 +692,12 @@ if (clearBtn) {
     clearConversationStorage();
     stopSpeech();
     hideCaption();
+    hideCaptionText();
     hideChatBubble();
 
-    setStatus("Fresh start! Let's chat! 🌟", "ready");
+    setStatus("Fresh start! 🌟", "ready");
     log("Chat cleared - fresh start");
 
-    // Close menu
     menuPanel.classList.remove("active");
     menuOverlay.classList.remove("active");
   });
@@ -685,17 +707,16 @@ if (clearBtn) {
 if (demoLessonBtn) {
   demoLessonBtn.addEventListener("click", function () {
     const challenges = [
-      "Tell me about your favorite food.",
-      "Describe your best friend.",
-      "What did you do yesterday?",
-      "Where would you like to visit?",
-      "What's your favorite subject in school?",
+      "Tell me about something that made you happy today.",
+      "What's your favorite way to spend free time?",
+      "Describe someone you admire.",
+      "What's something new you'd like to learn?",
+      "Tell me about a place you'd love to visit.",
     ];
 
     const challenge = challenges[Math.floor(Math.random() * challenges.length)];
-    speak("Here's a fun challenge for you: " + challenge);
+    speak(challenge);
 
-    // Close menu
     menuPanel.classList.remove("active");
     menuOverlay.classList.remove("active");
   });
@@ -705,9 +726,8 @@ if (demoLessonBtn) {
    INITIALIZATION
    ============================ */
 function initialize() {
-  log("Spidey - Full-Screen Companion Ready! 🕷️");
+  log("Conversation Companion Ready! 💬");
 
-  // Move mic into the bottom-left container (if present)
   try {
     if (micContainer) {
       const existingMic = document.getElementById("micBtn");
@@ -725,9 +745,9 @@ function initialize() {
 
   if (hasHistory) {
     log("✅ Previous conversation restored!");
-    setStatus("Hey! I missed you! 😊", "ready");
+    setStatus("Welcome back! 💭", "ready");
   } else {
-    setStatus("Hey friend! Ready to chat? 👋", "ready");
+    setStatus("Ready to chat! 💭", "ready");
   }
 
   // Enhanced voice loading

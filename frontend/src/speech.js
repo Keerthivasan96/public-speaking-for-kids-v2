@@ -1,14 +1,16 @@
 // frontend/src/speech.js
-// Improved SpeechRecognition + TTS utility.
+// Improved SpeechRecognition + TTS with proper coordination
 
 let recognition = null;
 let _onFinal = null;
 let _continuous = false;
 let _isListening = false;
-let isSpeaking = false;   // <-- PATCH: unified speaking flag
+let isSpeaking = false;
+let recognitionRestartTimer = null;
 
 /**
  * Start listening for speech.
+ * Will NOT start if TTS is currently speaking.
  */
 export function startListening(onTextFinal, options = { continuous: false, lang: "en-IN" }) {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -17,22 +19,28 @@ export function startListening(onTextFinal, options = { continuous: false, lang:
     return;
   }
 
-  // ⛔ PATCH: Do NOT start recognition while TTS is speaking
+  // CRITICAL: Do NOT start recognition while TTS is speaking
   if (isSpeaking) {
-    console.log("startListening blocked: TTS speaking");
+    console.log("startListening blocked: TTS is speaking");
+    
+    // Queue for later if continuous mode
+    if (options.continuous) {
+      _onFinal = onTextFinal;
+      _continuous = true;
+    }
     return;
   }
 
   _onFinal = onTextFinal;
   _continuous = !!options.continuous;
 
-  // If already listening
+  // If already listening, just update callback
   if (recognition && _isListening) {
-    console.log("startListening: already active — updating callback/options");
+    console.log("startListening: already active – updating callback");
     return;
   }
 
-  // Fresh instance
+  // Clean up any existing instance
   try {
     if (recognition) {
       recognition.onend = null;
@@ -42,9 +50,16 @@ export function startListening(onTextFinal, options = { continuous: false, lang:
     }
   } catch (_) {}
 
+  // Clear any pending restart timers
+  if (recognitionRestartTimer) {
+    clearTimeout(recognitionRestartTimer);
+    recognitionRestartTimer = null;
+  }
+
+  // Create new recognition instance
   recognition = new SpeechRecognition();
   recognition.lang = options.lang || "en-IN";
-  recognition.continuous = false;
+  recognition.continuous = false; // We handle continuity manually
   recognition.interimResults = false;
   recognition.maxAlternatives = 1;
 
@@ -56,14 +71,24 @@ export function startListening(onTextFinal, options = { continuous: false, lang:
 
   recognition.onresult = (event) => {
     const text = event?.results?.[0]?.[0]?.transcript || "";
-    if (typeof _onFinal === "function") {
-      try { _onFinal(text); } catch (e) {}
+    console.log("🎤 Recognized:", text);
+    
+    if (typeof _onFinal === "function" && text.trim()) {
+      try { 
+        _onFinal(text.trim()); 
+      } catch (e) {
+        console.error("Error in recognition callback:", e);
+      }
     }
   };
 
   recognition.onerror = (e) => {
-    console.warn("SpeechRecognition error", e);
-    document.dispatchEvent(new CustomEvent("speechRecognitionError", { detail: e }));
+    console.warn("SpeechRecognition error:", e.error);
+    
+    // Don't restart on certain errors
+    if (e.error === 'aborted' || e.error === 'no-speech') {
+      document.dispatchEvent(new CustomEvent("speechRecognitionError", { detail: e }));
+    }
   };
 
   recognition.onend = () => {
@@ -71,21 +96,35 @@ export function startListening(onTextFinal, options = { continuous: false, lang:
     _isListening = false;
     document.dispatchEvent(new CustomEvent("speechRecognitionStopped"));
 
-    // 🔁 PATCH: DO NOT RESTART IF TTS IS SPEAKING
+    // Restart logic for continuous mode
     if (_continuous && !isSpeaking) {
-      setTimeout(() => {
+      // Add delay before restarting to prevent rapid cycling
+      recognitionRestartTimer = setTimeout(() => {
         try {
-          if (_continuous && !isSpeaking) {
+          if (_continuous && !isSpeaking && recognition) {
+            console.log("🔄 Restarting recognition (continuous mode)");
             recognition.start();
           }
         } catch (e) {
           console.warn("Failed to restart recognition:", e);
+          
+          // If restart fails, try recreating the instance
+          if (_continuous && !isSpeaking) {
+            setTimeout(() => {
+              startListening(_onFinal, { continuous: true, lang: options.lang });
+            }, 1000);
+          }
         }
-      }, 250);
+      }, 500); // 500ms delay between recognition cycles
     }
   };
 
-  try { recognition.start(); } catch (e) {}
+  try { 
+    recognition.start(); 
+    console.log("🎤 Recognition started");
+  } catch (e) {
+    console.error("Failed to start recognition:", e);
+  }
 }
 
 /**
@@ -96,6 +135,12 @@ export function stopListening() {
   _onFinal = null;
   _isListening = false;
 
+  // Clear restart timer
+  if (recognitionRestartTimer) {
+    clearTimeout(recognitionRestartTimer);
+    recognitionRestartTimer = null;
+  }
+
   if (recognition) {
     try { recognition.onend = null; } catch (_) {}
     try { recognition.onerror = null; } catch (_) {}
@@ -104,6 +149,7 @@ export function stopListening() {
   }
 
   document.dispatchEvent(new CustomEvent("speechRecognitionStopped"));
+  console.log("🎤 Listening stopped");
 }
 
 /**
@@ -111,50 +157,70 @@ export function stopListening() {
  */
 export function stopSpeaking() {
   if (window.speechSynthesis) {
-    try { window.speechSynthesis.cancel(); } catch (_) {}
+    try { 
+      window.speechSynthesis.cancel(); 
+    } catch (_) {}
   }
   isSpeaking = false;
   document.dispatchEvent(new CustomEvent("avatarTalkStop"));
 }
 
 /**
- * Speak text
+ * Speak text (basic implementation - main app has full version)
  */
 export function speakText(text) {
   if (!text) return;
 
-  stopSpeaking(); // cancel prior TTS
+  stopSpeaking();
 
   if (!("speechSynthesis" in window)) {
     console.warn("No speechSynthesis available");
     return;
   }
 
-  const u = new SpeechSynthesisUtterance(text);
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = "en-IN";
+  utterance.rate = 0.95;
+  utterance.pitch = 1.2;
 
   isSpeaking = true;
   document.dispatchEvent(new CustomEvent("avatarTalkStart"));
 
-  u.onend = () => {
+  utterance.onend = () => {
     isSpeaking = false;
     document.dispatchEvent(new CustomEvent("avatarTalkStop"));
+    
+    // If in continuous mode, restart listening
+    if (_continuous && _onFinal) {
+      setTimeout(() => {
+        if (!isSpeaking && _continuous) {
+          startListening(_onFinal, { continuous: true });
+        }
+      }, 800);
+    }
   };
 
-  u.onerror = (e) => {
+  utterance.onerror = (e) => {
     console.error("TTS error:", e);
     isSpeaking = false;
     document.dispatchEvent(new CustomEvent("avatarTalkStop"));
   };
 
-  try { window.speechSynthesis.speak(u); }
-  catch (e) {
+  try { 
+    window.speechSynthesis.speak(utterance); 
+  } catch (e) {
+    console.error("Speech error:", e);
     isSpeaking = false;
     document.dispatchEvent(new CustomEvent("avatarTalkStop"));
   }
 }
 
-if (typeof window !== "undefined" && typeof window.speakText !== "function") {
+// Expose for global access if needed
+if (typeof window !== "undefined") {
   window.speakText = speakText;
+  window.stopSpeaking = stopSpeaking;
+  window.startListening = startListening;
+  window.stopListening = stopListening;
 }
 
 export default {
