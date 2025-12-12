@@ -149,7 +149,7 @@ function disposeAvatar(old) {
 function loadModel() {
   const loader = new GLTFLoader();
   loader.load(
-    "/assets/avatar.glb",
+    "/assets/avatar2.glb",
     (gltf) => {
       try {
         if (avatar) {
