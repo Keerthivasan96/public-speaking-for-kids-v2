@@ -1,364 +1,217 @@
-// frontend/src/speech.js
-// MOBILE-OPTIMIZED Speech Recognition + TTS
-// Fixes issues with mobile browsers (Android/iOS)
+// ============================================================
+// FIXED SpeechRecognition + TTS  (SUPER STABLE FOR MOBILE + PC)
+// Uses OLD stable logic + mobile onspeechend fix
+// ============================================================
 
 let recognition = null;
 let _onFinal = null;
 let _continuous = false;
 let _isListening = false;
 let isSpeaking = false;
-let recognitionRestartTimer = null;
-let silenceTimer = null;
-let interimTranscript = "";
-let finalTranscript = "";
+let restartTimer = null;
 
-// Mobile detection
-const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-const isAndroid = /Android/i.test(navigator.userAgent);
-
-// MOBILE FIX: Shorter timeout for mobile (they're more sensitive)
-const SILENCE_TIMEOUT = isMobile ? 1200 : 1800; // Mobile: 1.2s, Desktop: 1.8s
-
-console.log(`Device: ${isMobile ? 'Mobile' : 'Desktop'} (iOS: ${isIOS}, Android: ${isAndroid})`);
+// Detect mobile
+const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+console.log("Speech Engine Loaded → Device:", isMobile ? "MOBILE" : "DESKTOP");
 
 /**
- * Start listening - MOBILE OPTIMIZED
+ * START LISTENING — FINAL STABLE VERSION
  */
-export function startListening(onTextFinal, options = {}) {
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  
-  if (!SpeechRecognition) {
-    console.error("Speech Recognition not supported");
-    alert("Your browser doesn't support speech recognition. Please use Chrome or Safari.");
-    return;
-  }
-
-  // MOBILE FIX: Don't start if TTS is speaking
-  if (isSpeaking) {
-    console.log("❌ Recognition blocked: TTS speaking");
-    if (options.continuous) {
-      _onFinal = onTextFinal;
-      _continuous = true;
-    }
-    return;
-  }
-
-  _onFinal = onTextFinal;
-  _continuous = !!options.continuous;
-
-  // If already listening, just update callback
-  if (recognition && _isListening) {
-    console.log("⚠️ Already listening - updating callback");
-    return;
-  }
-
-  // Clean up existing
-  cleanup();
-
-  interimTranscript = "";
-  finalTranscript = "";
-
-  // Create recognition
-  recognition = new SpeechRecognition();
-  
-  // MOBILE FIX: Different settings for mobile vs desktop
-  if (isMobile) {
-    recognition.continuous = false;  // Mobile works better with false
-    recognition.interimResults = true;
-    recognition.maxAlternatives = 1;
-  } else {
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.maxAlternatives = 1;
-  }
-  
-  recognition.lang = options.lang || "en-IN";
-
-  recognition.onstart = () => {
-    console.log("🎤 Recognition STARTED");
-    _isListening = true;
-    document.dispatchEvent(new CustomEvent("speechRecognitionStarted"));
-  };
-
-  recognition.onresult = (event) => {
-    clearTimeout(silenceTimer);
-
-    interimTranscript = "";
-    
-    for (let i = event.resultIndex; i < event.results.length; i++) {
-      const transcript = event.results[i][0].transcript;
-      
-      if (event.results[i].isFinal) {
-        finalTranscript += transcript + " ";
-        console.log("🎤 Final:", transcript);
-      } else {
-        interimTranscript += transcript;
-        console.log("🎤 Interim:", transcript);
-      }
+export function startListening(onFinalCallback, options = { continuous: false, lang: "en-IN" }) {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+        alert("Speech Recognition not supported on this browser.");
+        return;
     }
 
-    // MOBILE FIX: On mobile, finalize faster
-    const timeout = isMobile ? 800 : SILENCE_TIMEOUT;
-    
-    silenceTimer = setTimeout(() => {
-      const fullText = (finalTranscript + interimTranscript).trim();
-      
-      if (fullText && typeof _onFinal === "function") {
-        console.log("✅ Complete:", fullText);
-        
-        try {
-          _onFinal(fullText, true);
-        } catch (e) {
-          console.error("Callback error:", e);
+    // Do not start if TTS is talking
+    if (isSpeaking) {
+        console.log("⛔ Blocked: TTS speaking");
+        if (options.continuous) {
+            _continuous = true;
+            _onFinal = onFinalCallback;
         }
-        
-        finalTranscript = "";
-        interimTranscript = "";
-        
-        // MOBILE FIX: Stop and let app restart if needed
-        stopListening();
-      }
-    }, timeout);
-  };
-
-  recognition.onerror = (e) => {
-    console.error("🎤 ERROR:", e.error, e);
-    clearTimeout(silenceTimer);
-    
-    // MOBILE FIX: Handle specific mobile errors
-    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
-      alert("Please allow microphone access in your browser settings.");
-    } else if (e.error === 'no-speech') {
-      console.log("No speech detected, restarting...");
-    } else if (e.error === 'network') {
-      console.error("Network error - check internet connection");
+        return;
     }
-    
-    document.dispatchEvent(new CustomEvent("speechRecognitionError", { detail: e }));
-  };
 
-  recognition.onend = () => {
-    console.log("🎤 Recognition ENDED");
-    _isListening = false;
-    clearTimeout(silenceTimer);
-    document.dispatchEvent(new CustomEvent("speechRecognitionStopped"));
+    _onFinal = onFinalCallback;
+    _continuous = options.continuous;
 
-    // MOBILE FIX: More reliable restart logic
-    if (_continuous && !isSpeaking) {
-      const restartDelay = isMobile ? 300 : 500;
-      
-      recognitionRestartTimer = setTimeout(() => {
+    // Already listening?
+    if (recognition && _isListening) {
+        console.log("⚠ Already listening (skipping)");
+        return;
+    }
+
+    // Clean previous recognizer
+    cleanup();
+
+    recognition = new SpeechRecognition();
+    recognition.lang = options.lang || "en-IN";
+
+    // *** CRITICAL STABLE SETTINGS ***
+    recognition.continuous = false;       // PC + mobile reliable mode
+    recognition.interimResults = false;   // ALWAYS return final transcript
+    recognition.maxAlternatives = 1;
+
+    // ******** STABLE MOBILE FIX ********
+    recognition.onspeechend = () => {
+        console.log("🎤 Speech ended → stopping recognition");
+        try { recognition.stop(); } catch (e) {}
+    };
+    // ***********************************
+
+    recognition.onstart = () => {
+        console.log("🎤 Listening started");
+        _isListening = true;
+        document.dispatchEvent(new CustomEvent("speechRecognitionStarted"));
+    };
+
+    recognition.onresult = (event) => {
+        const finalText = event.results[0][0].transcript.trim();
+        console.log("🎤 Final transcript:", finalText);
+
+        if (finalText && typeof _onFinal === "function") {
+            _onFinal(finalText);
+        }
+    };
+
+    recognition.onerror = (e) => {
+        console.warn("❌ SpeechRecognition error:", e.error);
+        document.dispatchEvent(new CustomEvent("speechRecognitionError", { detail: e }));
+    };
+
+    recognition.onend = () => {
+        console.log("🎤 Recognition ended");
+        _isListening = false;
+        document.dispatchEvent(new CustomEvent("speechRecognitionStopped"));
+
+        // CONTINUOUS MODE LOOP
         if (_continuous && !isSpeaking) {
-          console.log("🔄 Auto-restarting...");
-          
-          try {
-            if (recognition) {
-              recognition.start();
-            } else {
-              // Recreate if needed
-              startListening(_onFinal, { 
-                continuous: true, 
-                lang: options.lang,
-                interimResults: true
-              });
-            }
-          } catch (e) {
-            console.warn("Restart failed:", e.message);
-            
-            // MOBILE FIX: Wait longer and try full recreation
-            if (_continuous && !isSpeaking) {
-              setTimeout(() => {
-                startListening(_onFinal, { 
-                  continuous: true, 
-                  lang: options.lang,
-                  interimResults: true
-                });
-              }, 1000);
-            }
-          }
+            restartTimer = setTimeout(() => {
+                console.log("🔄 Restarting listening (continuous mode)");
+                startListening(_onFinal, { continuous: true, lang: options.lang });
+            }, 400);
         }
-      }, restartDelay);
-    }
-  };
+    };
 
-  // MOBILE FIX: Try-catch for mobile quirks
-  try {
-    recognition.start();
-    console.log(`🎤 Started (${isMobile ? 'Mobile' : 'Desktop'} mode)`);
-  } catch (e) {
-    console.error("Failed to start:", e);
-    
-    // MOBILE FIX: Sometimes mobile needs a moment
-    if (isMobile) {
-      setTimeout(() => {
-        try {
-          recognition.start();
-        } catch (e2) {
-          console.error("Second start attempt failed:", e2);
-        }
-      }, 500);
+    // Start recognition
+    try {
+        recognition.start();
+        console.log("🎤 Recognition start (OK)");
+    } catch (e) {
+        console.error("Failed to start recognition:", e);
     }
-  }
 }
 
 /**
- * Stop listening - CLEAN
+ * STOP LISTENING
  */
 export function stopListening() {
-  console.log("🛑 Stopping recognition...");
-  
-  _continuous = false;
-  _onFinal = null;
-  _isListening = false;
+    console.log("🛑 stopListening() called");
 
-  cleanup();
+    _continuous = false;
+    _onFinal = null;
+    _isListening = false;
 
-  interimTranscript = "";
-  finalTranscript = "";
+    cleanup();
 
-  document.dispatchEvent(new CustomEvent("speechRecognitionStopped"));
+    document.dispatchEvent(new CustomEvent("speechRecognitionStopped"));
 }
 
 /**
- * Cleanup helper
+ * Cleanup recognition safely
  */
 function cleanup() {
-  clearTimeout(recognitionRestartTimer);
-  clearTimeout(silenceTimer);
+    if (restartTimer) {
+        clearTimeout(restartTimer);
+        restartTimer = null;
+    }
 
-  if (recognition) {
-    try { recognition.onend = null; } catch (_) {}
-    try { recognition.onerror = null; } catch (_) {}
-    try { recognition.onresult = null; } catch (_) {}
-    try { recognition.stop(); } catch (_) {}
-    recognition = null;
-  }
+    if (recognition) {
+        try { recognition.onend = null; } catch (_) {}
+        try { recognition.onerror = null; } catch (_) {}
+        try { recognition.onresult = null; } catch (_) {}
+        try { recognition.stop(); } catch (_) {}
+        recognition = null;
+    }
 }
 
 /**
- * Stop TTS
+ * STOP TTS instantly
  */
 export function stopSpeaking() {
-  if (window.speechSynthesis) {
-    try { 
-      window.speechSynthesis.cancel(); 
-    } catch (_) {}
-  }
-  isSpeaking = false;
-  document.dispatchEvent(new CustomEvent("avatarTalkStop"));
+    if (window.speechSynthesis) {
+        try { window.speechSynthesis.cancel(); } catch (_) {}
+    }
+    isSpeaking = false;
+    document.dispatchEvent(new CustomEvent("avatarTalkStop"));
 }
 
 /**
- * Speak - MOBILE OPTIMIZED
+ * SPEAK TEXT — consistent voice across devices
  */
 export function speakText(text) {
-  if (!text) return;
+    if (!text) return;
 
-  stopSpeaking();
+    stopSpeaking();
 
-  if (!("speechSynthesis" in window)) {
-    console.warn("TTS not available");
-    return;
-  }
-
-  const utterance = new SpeechSynthesisUtterance(text);
-  
-  // MOBILE FIX: Different settings for mobile
-  if (isMobile) {
-    utterance.lang = "en-US";  // Mobile works better with en-US
-    utterance.rate = 0.90;
-    utterance.pitch = 1.15;
-    utterance.volume = 1.0;
-  } else {
-    utterance.lang = "en-US";
-    utterance.rate = 0.95;
-    utterance.pitch = 1.22;
-    utterance.volume = 1.0;
-  }
-
-  // MOBILE FIX: Wait for voices to load on iOS
-  if (isIOS) {
-    const voices = window.speechSynthesis.getVoices();
-    if (voices.length === 0) {
-      console.log("⏳ Waiting for iOS voices...");
-      window.speechSynthesis.onvoiceschanged = () => {
-        const v = window.speechSynthesis.getVoices();
-        console.log(`✓ ${v.length} voices loaded`);
-      };
+    if (!("speechSynthesis" in window)) {
+        console.warn("No TTS available");
+        return;
     }
-  }
 
-  isSpeaking = true;
-  document.dispatchEvent(new CustomEvent("avatarTalkStart"));
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = "en-US";
+    utter.rate = 0.95;
+    utter.pitch = 1.15;     // teen female tone
+    utter.volume = 1.0;
 
-  utterance.onstart = () => {
-    console.log("🔊 TTS started");
     isSpeaking = true;
-  };
+    document.dispatchEvent(new CustomEvent("avatarTalkStart"));
 
-  utterance.onend = () => {
-    console.log("🔇 TTS ended");
-    isSpeaking = false;
-    document.dispatchEvent(new CustomEvent("avatarTalkStop"));
-    
-    // MOBILE FIX: Give mobile more time before restarting recognition
-    if (_continuous && _onFinal) {
-      const delay = isMobile ? 1000 : 800;
-      
-      setTimeout(() => {
-        if (!isSpeaking && _continuous) {
-          console.log("🔄 Restarting recognition after TTS");
-          startListening(_onFinal, { continuous: true, interimResults: true });
+    utter.onend = () => {
+        console.log("🔇 TTS ended");
+        isSpeaking = false;
+        document.dispatchEvent(new CustomEvent("avatarTalkStop"));
+
+        // Auto restart listening
+        if (_continuous && _onFinal) {
+            setTimeout(() => {
+                if (!isSpeaking) {
+                    console.log("🎤 Restart listening after TTS");
+                    startListening(_onFinal, { continuous: true });
+                }
+            }, 600);
         }
-      }, delay);
-    }
-  };
+    };
 
-  utterance.onerror = (e) => {
-    console.error("🔊 TTS error:", e);
-    isSpeaking = false;
-    document.dispatchEvent(new CustomEvent("avatarTalkStop"));
-  };
+    utter.onerror = (e) => {
+        console.error("TTS error:", e);
+        isSpeaking = false;
+    };
 
-  try {
-    // MOBILE FIX: Cancel any pending speech first
-    window.speechSynthesis.cancel();
-    
-    // MOBILE FIX: Small delay for mobile
-    if (isMobile) {
-      setTimeout(() => {
-        window.speechSynthesis.speak(utterance);
-      }, 100);
-    } else {
-      window.speechSynthesis.speak(utterance);
+    try {
+        window.speechSynthesis.cancel(); // prevent overlap
+        window.speechSynthesis.speak(utter);
+        console.log("🔊 Speaking");
+    } catch (e) {
+        console.error("Speech error:", e);
+        isSpeaking = false;
     }
-  } catch (e) {
-    console.error("Speech error:", e);
-    isSpeaking = false;
-    document.dispatchEvent(new CustomEvent("avatarTalkStop"));
-  }
 }
 
-// Global access
+// Global access for debugging
 if (typeof window !== "undefined") {
-  window.speakText = speakText;
-  window.stopSpeaking = stopSpeaking;
-  window.startListening = startListening;
-  window.stopListening = stopListening;
-  
-  // Expose mobile detection for debugging
-  window.__speechDebug = {
-    isMobile,
-    isIOS,
-    isAndroid,
-    silenceTimeout: SILENCE_TIMEOUT
-  };
+    window.startListening = startListening;
+    window.stopListening = stopListening;
+    window.speakText = speakText;
+    window.stopSpeaking = stopSpeaking;
 }
 
 export default {
-  startListening,
-  stopListening,
-  stopSpeaking,
-  speakText
+    startListening,
+    stopListening,
+    speakText,
+    stopSpeaking
 };
