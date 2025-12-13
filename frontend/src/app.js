@@ -11,6 +11,16 @@ function isMobileDevice() {
   return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 }
 
+const IS_MOBILE = isMobileDevice();
+const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+const IS_ANDROID = /Android/i.test(navigator.userAgent);
+
+console.log(`📱 Device: ${IS_MOBILE ? 'Mobile' : 'Desktop'}`, {
+  iOS: IS_IOS,
+  Android: IS_ANDROID,
+  userAgent: navigator.userAgent
+});
+
 /* -------------------------
    UI ELEMENTS
    ------------------------- */
@@ -348,7 +358,7 @@ function selectBestVoice() {
 }
 
 /* ============================
-   IMPROVED TTS WITH CONSISTENCY
+   IMPROVED TTS WITH MOBILE FIXES
    ============================ */
 function speak(text) {
   if (!text || !text.trim()) return;
@@ -360,23 +370,29 @@ function speak(text) {
 
   const utter = new SpeechSynthesisUtterance(cleanedText);
   
-  // CONSISTENT VOICE SETTINGS across devices
-  utter.lang = "en-US"; // Changed from en-IN for better consistency
+  // MOBILE FIX: Use en-US for better consistency
+  utter.lang = "en-US";
   utter.volume = 1.0;
   
-  // Device-specific tuning for consistency
-  if (isMobileDevice()) {
-    utter.rate = 0.92;  // Slightly slower on mobile
-    utter.pitch = 1.18; // Teen female voice
+  // MOBILE-SPECIFIC TUNING
+  if (IS_MOBILE) {
+    utter.rate = 0.88;   // Slower on mobile for clarity
+    utter.pitch = 1.15;  // Teen female voice
+    
+    // ANDROID FIX: Some Android devices need this
+    if (IS_ANDROID) {
+      utter.rate = 0.85;
+      utter.pitch = 1.12;
+    }
   } else {
-    utter.rate = 0.95;  // Desktop
-    utter.pitch = 1.22; // Slightly higher on desktop to match mobile
+    utter.rate = 0.95;
+    utter.pitch = 1.22;
   }
 
   const bestVoice = selectBestVoice();
   if (bestVoice) {
     utter.voice = bestVoice;
-    log("Speaking with: " + bestVoice.name);
+    log("🔊 Voice: " + bestVoice.name);
   }
 
   utter.onstart = function () {
@@ -384,6 +400,7 @@ function speak(text) {
     if (avatarStartTalking) avatarStartTalking();
     showCaptionText(cleanedText);
     setStatus("💬", "speaking");
+    log("🔊 Speaking started");
   };
 
   utter.onend = function () {
@@ -391,8 +408,12 @@ function speak(text) {
     if (avatarStopTalking) avatarStopTalking();
     hideCaptionText();
 
+    log("🔇 Speaking ended");
+
     if (isContinuousMode) {
-      setTimeout(startNextListeningCycle, 800);
+      // MOBILE FIX: Wait longer on mobile before restarting
+      const delay = IS_MOBILE ? 1200 : 800;
+      setTimeout(startNextListeningCycle, delay);
     } else {
       setStatus("Your turn! 💭", "ready");
     }
@@ -410,7 +431,19 @@ function speak(text) {
     }
   };
 
-  window.speechSynthesis.speak(utter);
+  // MOBILE FIX: Cancel any pending speech
+  try {
+    window.speechSynthesis.cancel();
+  } catch (e) {}
+
+  // MOBILE FIX: Small delay for mobile browsers
+  if (IS_MOBILE) {
+    setTimeout(() => {
+      window.speechSynthesis.speak(utter);
+    }, 150);
+  } else {
+    window.speechSynthesis.speak(utter);
+  }
 }
 
 function stopSpeech() {
@@ -421,42 +454,53 @@ function stopSpeech() {
 }
 
 /* ============================
-   IMPROVED SPEECH RECOGNITION
+   IMPROVED SPEECH RECOGNITION - MOBILE OPTIMIZED
    ============================ */
 function startNextListeningCycle() {
-  if (!isContinuousMode || isSpeaking) return;
+  if (!isContinuousMode || isSpeaking) {
+    log("⏸️ Not starting: continuous=" + isContinuousMode + ", speaking=" + isSpeaking);
+    return;
+  }
 
   setStatus("Listening... 👂", "listening");
   isListening = true;
   speechBuffer = "";
   
-  // Use improved recognition with longer timeout
-  startListening(handleUserSpeech, { 
+  log("🎤 Starting listening cycle...");
+  
+  // MOBILE FIX: Different options for mobile
+  const options = {
     continuous: false,
     lang: "en-IN",
-    interimResults: true // Enable interim results for better capture
-  });
+    interimResults: true
+  };
+  
+  startListening(handleUserSpeech, options);
 }
 
 function handleUserSpeech(text, isFinal = true) {
+  log(`🎤 handleUserSpeech: "${text}", isFinal=${isFinal}`);
+  
   if (!text || !text.trim()) {
+    log("⚠️ Empty speech detected");
     if (isContinuousMode && isFinal) {
       setTimeout(startNextListeningCycle, 500);
     }
     return;
   }
 
-  // Buffer speech until final result
+  // Buffer speech until final
   if (!isFinal) {
     speechBuffer = text;
+    log("📝 Buffered: " + text);
     return;
   }
 
-  // Use buffered text or current text
+  // Use buffered or current text
   const finalText = speechBuffer || text;
   speechBuffer = "";
   
-  log("User said: " + finalText);
+  log("✅ Final speech: " + finalText);
   sendToBackend(finalText);
 }
 
@@ -666,21 +710,54 @@ function initialize() {
   if (window.speechSynthesis) {
     let voices = window.speechSynthesis.getVoices();
 
-    window.speechSynthesis.onvoiceschanged = () => {
+    // MOBILE FIX: iOS needs onvoiceschanged event
+    const loadVoices = () => {
       voices = window.speechSynthesis.getVoices();
-      log(voices.length + " voices loaded");
+      log("✓ " + voices.length + " voices loaded");
       
-      // Log female voices for debugging
-      voices.filter(v => 
-        v.lang.startsWith("en") && /female|woman/i.test(v.name)
-      ).forEach(v => {
-        console.log("✓ Female voice:", v.name, v.lang);
-      });
+      // Log available voices for debugging
+      if (voices.length > 0) {
+        const femaleVoices = voices.filter(v => 
+          v.lang.startsWith("en") && /female|woman/i.test(v.name)
+        );
+        
+        console.log("📢 Available female voices:");
+        femaleVoices.forEach(v => {
+          console.log(`  - ${v.name} (${v.lang})`);
+        });
+        
+        if (femaleVoices.length === 0) {
+          console.log("⚠️ No female voices found, will use default");
+        }
+      }
     };
 
-    if (isMobileDevice()) {
-      setTimeout(() => window.speechSynthesis.getVoices(), 100);
+    if (voices.length > 0) {
+      loadVoices();
+    } else {
+      window.speechSynthesis.onvoiceschanged = loadVoices;
     }
+
+    // MOBILE FIX: Trigger voice loading on iOS
+    if (IS_IOS || IS_MOBILE) {
+      setTimeout(() => {
+        window.speechSynthesis.getVoices();
+        log("🔄 Triggered voice load for mobile");
+      }, 100);
+    }
+  }
+
+  // MOBILE FIX: Request microphone permission on mobile
+  if (IS_MOBILE && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+    log("📱 Requesting microphone permission...");
+    navigator.mediaDevices.getUserMedia({ audio: true })
+      .then(() => {
+        log("✅ Microphone permission granted");
+      })
+      .catch((err) => {
+        console.error("❌ Microphone permission denied:", err);
+        alert("Please allow microphone access to use voice features.");
+      });
   }
 }
 
