@@ -1,5 +1,5 @@
-// Spidey - Continuous Conversation Mode (Replika-style)
-// Full-Screen Companion with hands-free conversation
+// Anime Learning Companion - Full Featured Version
+// Continuous conversation + Practice mode with corrections
 
 import { startListening, stopListening } from "./speech.js";
 import { avatarStartTalking, avatarStopTalking } from "./threejs-avatar.js";
@@ -25,34 +25,25 @@ const modeToggle = document.getElementById("modeToggle");
 
 const statusEl = document.getElementById("status");
 const logEl = document.getElementById("log");
-
-const captionBox = document.getElementById("caption-box");
-const captionText = document.getElementById("caption-text");
-
-const micContainer = document.getElementById("mic-container");
 const chatCaption = document.getElementById("chatCaption");
-
-const chatBubble = document.getElementById("chatBubble");
-const bubbleText = document.getElementById("bubbleText");
+const correctionPanel = document.getElementById("correctionPanel");
 
 /* ============================
    STATE
    ============================ */
 let isListening = false;
 let isSpeaking = false;
-let isContinuousMode = false; // NEW: Continuous conversation flag
+let isContinuousMode = false;
 let lastSpokenText = "";
 let conversationHistory = [];
 let isPracticeMode = false;
-
-let captionChunks = [];
-let currentChunkIndex = 0;
-const CAPTION_CHAR_LIMIT = 150;
+let recognitionTimeout = null;
+let speechBuffer = "";
 
 /* ============================
    STORAGE
    ============================ */
-const STORAGE_KEY = "spidey_conversation_history";
+const STORAGE_KEY = "anime_companion_history";
 const MAX_HISTORY_ITEMS = 200;
 
 /* ============================
@@ -64,7 +55,7 @@ function log(msg) {
     logEl.innerHTML += '<span style="color:#999">[' + timestamp + ']</span> ' + msg + "<br>";
     logEl.scrollTop = logEl.scrollHeight;
   }
-  console.log("[Spidey]", msg);
+  console.log("[Companion]", msg);
 }
 
 /* ============================
@@ -74,7 +65,7 @@ function saveConversationHistory() {
   try {
     const historyToSave = conversationHistory.slice(-MAX_HISTORY_ITEMS);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(historyToSave));
-    log("💾 Conversation saved (" + historyToSave.length + " messages)");
+    log("💾 Saved (" + historyToSave.length + " messages)");
   } catch (err) {
     console.error("Failed to save conversation:", err);
   }
@@ -105,127 +96,13 @@ function clearConversationStorage() {
 }
 
 /* ============================
-   Conversation summary helpers
+   Caption Functions
    ============================ */
-function extractTopics(messages) {
-  const topics = new Set();
-  const keywords = [
-    "family", "friend", "school", "teacher", "cricket", "football",
-    "movie", "food", "pet", "dog", "cat", "favorite", "yesterday",
-    "tomorrow", "weekend", "exam", "test", "game", "phone", "computer"
-  ];
-
-  messages.forEach(function (msg) {
-    const text = msg.content.toLowerCase();
-    keywords.forEach(function (keyword) {
-      if (text.includes(keyword)) {
-        topics.add(keyword);
-      }
-    });
-  });
-
-  return Array.from(topics).slice(0, 5);
-}
-
-function generateConversationSummary() {
-  if (conversationHistory.length < 10) return "";
-
-  const topics = extractTopics(conversationHistory);
-  if (topics.length === 0) return "";
-
-  return "Previous topics: " + topics.join(", ") + ".";
-}
-
-/* ============================
-   CAPTION FUNCTIONS (UPDATED)
-   ============================ */
-function chunkText(text, maxChars) {
-  maxChars = maxChars || CAPTION_CHAR_LIMIT;
-  const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
-  const chunks = [];
-  let currentChunk = "";
-
-  for (const sentence of sentences) {
-    if ((currentChunk + sentence).length <= maxChars) {
-      currentChunk += sentence;
-    } else {
-      if (currentChunk) chunks.push(currentChunk.trim());
-      currentChunk = sentence;
-    }
-  }
-
-  if (currentChunk) chunks.push(currentChunk.trim());
-  return chunks;
-}
-
-function showCaption(text) {
-  if (!captionBox || !captionText) return;
-
-  captionChunks = chunkText(text, CAPTION_CHAR_LIMIT);
-  currentChunkIndex = 0;
-
-  displayCaptionChunk(0);
-  captionBox.classList.add("active");
-
-  log("Caption shown: " + captionChunks.length + " chunk(s)");
-}
-
-function displayCaptionChunk(index) {
-  if (!captionText || index >= captionChunks.length) return;
-
-  const chunk = captionChunks[index];
-  const words = chunk.split(" ");
-  const wordsHTML = words
-    .map(function (word, i) {
-      return '<span class="caption-word" data-index="' + i + '">' + escapeHtml(word) + "</span>";
-    })
-    .join(" ");
-
-  captionText.innerHTML = wordsHTML;
-  currentChunkIndex = index;
-}
-
-function advanceToNextChunk() {
-  if (currentChunkIndex < captionChunks.length - 1) {
-    displayCaptionChunk(currentChunkIndex + 1);
-    return true;
-  }
-  return false;
-}
-
-function highlightCaptionWord(wordIndex) {
-  if (!captionText) return;
-
-  const allWords = captionText.querySelectorAll(".caption-word");
-  allWords.forEach(function (w) {
-    w.classList.remove("highlight");
-  });
-
-  const currentWord = captionText.querySelector('[data-index="' + wordIndex + '"]');
-  if (currentWord) {
-    currentWord.classList.add("highlight");
-  }
-}
-
-function hideCaption() {
-  if (!captionBox) return;
-
-  captionBox.classList.remove("active");
-  captionChunks = [];
-  currentChunkIndex = 0;
-}
-
-/* -------------------------
-   Compact caption (NEW: stays until TTS ends)
-   ------------------------- */
 export function showCaptionText(text) {
   if (!chatCaption) return;
   chatCaption.textContent = text;
   chatCaption.classList.add("active");
-  
-  // Clear any existing timer
   clearTimeout(window.__captionHideTimer);
-  // Caption will be hidden when TTS ends (in speak function)
 }
 
 function hideCaptionText() {
@@ -235,16 +112,72 @@ function hideCaptionText() {
 }
 
 /* ============================
-   CHAT BUBBLE (REMOVED - no user transcript display)
+   PRACTICE MODE - CORRECTION UI
    ============================ */
-function showChatBubble(text) {
-  // Disabled - we don't show user's spoken text anymore
-  return;
+function showCorrection(userText, correctedText, explanation, correctness) {
+  if (!correctionPanel) return;
+
+  let statusClass = "";
+  let statusIcon = "";
+  let statusText = "";
+  
+  if (correctness === "correct") {
+    statusClass = "correction-correct";
+    statusIcon = "✔️";
+    statusText = "Perfect!";
+  } else if (correctness === "almost") {
+    statusClass = "correction-almost";
+    statusIcon = "⚠️";
+    statusText = "Almost right!";
+  } else {
+    statusClass = "correction-wrong";
+    statusIcon = "❌";
+    statusText = "Let's fix this";
+  }
+
+  const html = `
+    <div class="correction-card ${statusClass}">
+      <div class="correction-header">
+        <span class="correction-icon">${statusIcon}</span>
+        <span class="correction-status">${statusText}</span>
+      </div>
+      
+      <div class="correction-content">
+        <div class="correction-section user-said">
+          <div class="correction-label">You said:</div>
+          <div class="correction-text">"${escapeHtml(userText)}"</div>
+        </div>
+        
+        ${correctness !== "correct" ? `
+          <div class="correction-section corrected">
+            <div class="correction-label">Corrected:</div>
+            <div class="correction-text correction-green">"${escapeHtml(correctedText)}"</div>
+          </div>
+          
+          <div class="correction-explanation">
+            ${escapeHtml(explanation)}
+          </div>
+        ` : `
+          <div class="correction-celebration">
+            Great job! You said it perfectly! 🎉
+          </div>
+        `}
+      </div>
+    </div>
+  `;
+
+  correctionPanel.innerHTML = html;
+  correctionPanel.classList.add("active");
+
+  // Auto-hide after 8 seconds
+  setTimeout(() => {
+    correctionPanel.classList.remove("active");
+  }, 8000);
 }
 
-function hideChatBubble() {
-  if (!chatBubble) return;
-  chatBubble.classList.remove("active");
+function hideCorrection() {
+  if (!correctionPanel) return;
+  correctionPanel.classList.remove("active");
 }
 
 /* ============================
@@ -255,10 +188,10 @@ function setStatus(message, type) {
 
   const friendlyMessages = {
     ready: "Ready to chat! 💭",
-    listening: "I'm listening... 👂",
-    thinking: "Thinking... 🤔",
+    listening: "Listening... 👂",
+    thinking: "Thinking... 💭",
     speaking: "💬",
-    error: "Connection issue 😅",
+    error: "Oops! 😅",
   };
 
   statusEl.textContent = friendlyMessages[type] || message;
@@ -286,242 +219,191 @@ function renderReplyMarkdown(md) {
    IMPROVED PROMPT BUILDER
    ============================ */
 function buildPrompt(userText) {
-  const modeInstruction = isPracticeMode
-    ? "Practice mode: If you notice a grammar mistake, gently mention it once and show the correct way. Keep it encouraging."
-    : "Casual chat: Be a supportive friend. Only mention major errors if they hurt clarity. Stay natural and warm.";
+  if (isPracticeMode) {
+    // PRACTICE MODE: Request structured correction
+    return `You are a friendly English learning companion (age 16-17, warm and supportive).
 
-  const toneGuide = "Speak like a caring 16-year-old friend. Keep replies short (30-50 words). Be genuine, not repetitive. No catchphrases.";
+TASK: Analyze this sentence for grammar/spelling errors and provide a structured response.
 
-  const history = conversationHistory.slice(-20).map(function (m) {
-    return (m.role === "user" ? "Student" : "Friend") + ": " + m.content;
-  }).join("\n");
+Student said: "${userText}"
 
-  const summary = generateConversationSummary();
+Respond in this EXACT JSON format (no markdown, no code blocks):
+{
+  "correctness": "correct" OR "almost" OR "wrong",
+  "corrected": "the corrected sentence here",
+  "explanation": "1-2 sentence explanation of what was fixed",
+  "reply": "encouraging 1-2 sentence response to the student"
+}
 
-  return `You are a friendly English conversation companion for teens (12-15 years old).
+Rules:
+- If sentence is perfect: correctness="correct", corrected=original, explanation="", reply=praise
+- If minor errors: correctness="almost", fix them, explain briefly
+- If major errors: correctness="wrong", fix them, explain kindly
+- Always be encouraging and supportive
+- Keep explanation under 20 words
+- Reply should be warm and friendly (13-15 year old appropriate)`;
+  } else {
+    // CASUAL MODE: Natural conversation
+    const characterProfile = `You're a friendly 16-17 year old anime-style English companion. You're warm, supportive, and genuinely interested in conversations.
 
-${modeInstruction}
+Your personality:
+- Cheerful and encouraging (like a supportive friend)
+- Natural and conversational (not formal or teacherly)
+- Expressive but not overdone
+- Show genuine interest with follow-up questions
+- Age-appropriate for 13-15 year olds
+- No catchphrases or repetitive patterns`;
 
-${toneGuide}
+    const history = conversationHistory.slice(-15).map(function (m) {
+      return (m.role === "user" ? "Student" : "You") + ": " + m.content;
+    }).join("\n");
 
-Context: You've had ${conversationHistory.length} exchanges. ${summary}
+    return `${characterProfile}
 
-Recent chat:
+Recent conversation:
 ${history || "(First message)"}
 
 Student: "${userText}"
 
-Reply naturally in 30-50 words. Be warm, not robotic. Vary your responses.`;
+Respond in 1-3 sentences (30-50 words). Be warm, natural, and engaging. Show interest!`;
+  }
 }
 
 /* ============================
-   TTS CLEANUP & VOICE SELECTION
+   CONSISTENT VOICE SELECTION
    ============================ */
-function cleanTextForSpeech(text) {
-  if (!text) return "";
-
-  return text
-    .replace(/[\u{1F600}-\u{1F64F}]/gu, "")
-    .replace(/[\u{1F300}-\u{1F5FF}]/gu, "")
-    .replace(/[\u{1F680}-\u{1F6FF}]/gu, "")
-    .replace(/[\u{1F700}-\u{1F77F}]/gu, "")
-    .replace(/[\u{1F780}-\u{1F7FF}]/gu, "")
-    .replace(/[\u{1F800}-\u{1F8FF}]/gu, "")
-    .replace(/[\u{1F900}-\u{1F9FF}]/gu, "")
-    .replace(/[\u{1FA00}-\u{1FA6F}]/gu, "")
-    .replace(/[\u{1FA70}-\u{1FAFF}]/gu, "")
-    .replace(/[\u{2600}-\u{26FF}]/gu, "")
-    .replace(/[\u{2700}-\u{27BF}]/gu, "")
-    .replace(/[\u{FE00}-\u{FE0F}]/gu, "")
-    .replace(/[\u{1F1E6}-\u{1F1FF}]/gu, "")
-    .replace(/[\u{1F3FB}-\u{1F3FF}]/gu, "")
-    .replace(/[\u{200D}]/gu, "")
-    .replace(/[*_~`#]/g, "")
-    .replace(/\[([^\]]+)\]/g, "$1")
-    .replace(/\(([^)]+)\)/g, "")
-    .replace(/[•▪▫►▻→↦]/g, "")
-    .replace(/[★☆✓✔✗✘]/g, "")
-    .replace(/[♠♣♥♦]/g, "")
-    .replace(/[""]/g, '"')
-    .replace(/['']/g, "'")
-    .replace(/\.{2,}/g, ".")
-    .replace(/!{2,}/g, "!")
-    .replace(/\?{2,}/g, "?")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
 function selectBestVoice() {
   const voices = window.speechSynthesis.getVoices();
+  if (!voices || voices.length === 0) return null;
 
-  if (!voices || voices.length === 0) {
-    console.warn("No voices available yet");
-    return null;
+  // PRIORITY SYSTEM for consistent voice across devices
+  
+  // 1. Look for specific high-quality female voices
+  const premiumVoices = [
+    "Google US English Female",
+    "Google UK English Female", 
+    "Microsoft Zira",
+    "Samantha",
+    "Karen",
+    "Victoria",
+    "Fiona",
+    "Google हिन्दी Female" // Hindi but works for English
+  ];
+
+  for (const voiceName of premiumVoices) {
+    const found = voices.find(v => v.name.includes(voiceName));
+    if (found) {
+      log("✓ Using premium voice: " + found.name);
+      return found;
+    }
   }
 
-  // Priority 1: Female Indian English voices (age-appropriate)
-  const femaleIndian = voices.filter(function (v) {
-    return v.lang.startsWith("en-IN") && /female|woman|girl/i.test(v.name);
-  });
-
+  // 2. Female Indian English
+  const femaleIndian = voices.filter(v => 
+    v.lang.startsWith("en-IN") && /female|woman/i.test(v.name)
+  );
   if (femaleIndian.length > 0) {
-    log("Using voice: " + femaleIndian[0].name);
+    log("✓ Using voice: " + femaleIndian[0].name);
     return femaleIndian[0];
   }
 
-  // Priority 2: Any Indian English voice
-  const indianVoices = voices.filter(function (v) {
-    return v.lang.startsWith("en-IN");
-  });
-
+  // 3. Any Indian English
+  const indianVoices = voices.filter(v => v.lang.startsWith("en-IN"));
   if (indianVoices.length > 0) {
-    log("Using voice: " + indianVoices[0].name);
+    log("✓ Using voice: " + indianVoices[0].name);
     return indianVoices[0];
   }
 
-  // Priority 3: Female English voices (US/GB)
-  const femaleEnglish = voices.filter(function (v) {
-    return (v.lang.startsWith("en-US") || v.lang.startsWith("en-GB")) && 
-           /female|woman|girl|samantha|victoria|zira|fiona/i.test(v.name);
-  });
-
+  // 4. Female English (US/GB)
+  const femaleEnglish = voices.filter(v => 
+    (v.lang.startsWith("en-US") || v.lang.startsWith("en-GB")) &&
+    /female|woman|girl/i.test(v.name)
+  );
   if (femaleEnglish.length > 0) {
-    log("Using voice: " + femaleEnglish[0].name);
+    log("✓ Using voice: " + femaleEnglish[0].name);
     return femaleEnglish[0];
   }
 
-  // Priority 4: Any English voice
-  const anyEnglish = voices.find(function (v) {
-    return v.lang.startsWith("en");
-  });
+  // 5. Any English female voice
+  const anyFemale = voices.find(v => 
+    v.lang.startsWith("en") && /female|woman/i.test(v.name)
+  );
+  if (anyFemale) {
+    log("✓ Using voice: " + anyFemale.name);
+    return anyFemale;
+  }
 
+  // 6. Fallback to first English voice
+  const anyEnglish = voices.find(v => v.lang.startsWith("en"));
   if (anyEnglish) {
-    log("Using voice: " + anyEnglish.name);
+    log("✓ Using voice: " + anyEnglish.name);
     return anyEnglish;
   }
 
-  log("Using voice: " + voices[0].name);
+  log("⚠ Using default voice: " + voices[0].name);
   return voices[0];
 }
 
 /* ============================
-   TTS (UPDATED: caption stays until end)
+   IMPROVED TTS WITH CONSISTENCY
    ============================ */
 function speak(text) {
   if (!text || !text.trim()) return;
 
   stopSpeech();
 
-  const cleanedText = cleanTextForSpeech(text);
+  const cleanedText = text.replace(/[*_~`#\[\]]/g, "").replace(/\s+/g, " ").trim();
   lastSpokenText = cleanedText;
 
   const utter = new SpeechSynthesisUtterance(cleanedText);
-  utter.lang = "en-IN";
-
+  
+  // CONSISTENT VOICE SETTINGS across devices
+  utter.lang = "en-US"; // Changed from en-IN for better consistency
+  utter.volume = 1.0;
+  
+  // Device-specific tuning for consistency
   if (isMobileDevice()) {
-    utter.rate = 0.9;
-    utter.pitch = 1.1; // Slightly higher for younger voice
-    utter.volume = 1;
+    utter.rate = 0.92;  // Slightly slower on mobile
+    utter.pitch = 1.18; // Teen female voice
   } else {
-    utter.rate = 0.95;
-    utter.pitch = 1.2; // Teen-friendly pitch
-    utter.volume = 1;
+    utter.rate = 0.95;  // Desktop
+    utter.pitch = 1.22; // Slightly higher on desktop to match mobile
   }
 
   const bestVoice = selectBestVoice();
-  if (bestVoice) utter.voice = bestVoice;
-
-  let wordIndex = 0;
-  let highlightInterval = null;
-
-  const words = cleanedText.split(" ");
-  const avgWordDuration = (cleanedText.length / words.length) * 100 / utter.rate;
+  if (bestVoice) {
+    utter.voice = bestVoice;
+    log("Speaking with: " + bestVoice.name);
+  }
 
   utter.onstart = function () {
     isSpeaking = true;
     if (avatarStartTalking) avatarStartTalking();
-
-    // Show caption - it will stay until TTS ends
     showCaptionText(cleanedText);
-    showCaption(cleanedText);
-
     setStatus("💬", "speaking");
-    log("Speech started");
-
-    highlightInterval = setInterval(function () {
-      if (wordIndex < words.length) {
-        highlightCaptionWord(wordIndex);
-        wordIndex++;
-
-        const currentWords = captionChunks[currentChunkIndex] ? captionChunks[currentChunkIndex].split(" ").length : 0;
-
-        if (wordIndex >= currentWords && currentChunkIndex < captionChunks.length - 1) {
-          wordIndex = 0;
-          setTimeout(function () {
-            advanceToNextChunk();
-          }, 200);
-        }
-      } else {
-        clearInterval(highlightInterval);
-      }
-    }, avgWordDuration);
-  };
-
-  utter.onboundary = function (event) {
-    if (event.name === "word" && highlightInterval) {
-      clearInterval(highlightInterval);
-      highlightInterval = null;
-
-      highlightCaptionWord(wordIndex);
-      wordIndex++;
-
-      const currentWords = captionChunks[currentChunkIndex] ? captionChunks[currentChunkIndex].split(" ").length : 0;
-
-      if (wordIndex >= currentWords) {
-        wordIndex = 0;
-        setTimeout(function () {
-          advanceToNextChunk();
-        }, 800);
-      }
-    }
   };
 
   utter.onend = function () {
-    if (highlightInterval) clearInterval(highlightInterval);
-
     isSpeaking = false;
     if (avatarStopTalking) avatarStopTalking();
-    hideCaption();
-    hideCaptionText(); // Hide caption when speech ends
+    hideCaptionText();
 
-    // NEW: If continuous mode is on, restart listening
     if (isContinuousMode) {
-      setTimeout(function() {
-        startNextListeningCycle();
-      }, 800); // Small pause before listening again
+      setTimeout(startNextListeningCycle, 800);
     } else {
       setStatus("Your turn! 💭", "ready");
     }
-
-    log("Speech ended");
   };
 
   utter.onerror = function (event) {
-    console.error("Speech error:", event);
-    if (highlightInterval) clearInterval(highlightInterval);
-
+    console.error("TTS error:", event);
     isSpeaking = false;
     if (avatarStopTalking) avatarStopTalking();
-    hideCaption();
     hideCaptionText();
-
-    setStatus("Connection issue 😅", "error");
+    setStatus("Oops! 😅", "error");
     
-    // Retry continuous mode after error
     if (isContinuousMode) {
-      setTimeout(function() {
-        startNextListeningCycle();
-      }, 1500);
+      setTimeout(startNextListeningCycle, 1500);
     }
   };
 
@@ -530,41 +412,49 @@ function speak(text) {
 
 function stopSpeech() {
   window.speechSynthesis.cancel();
-
   isSpeaking = false;
   if (avatarStopTalking) avatarStopTalking();
-  hideCaption();
   hideCaptionText();
-
-  log("Speech stopped");
 }
 
 /* ============================
-   CONTINUOUS CONVERSATION LOGIC
+   IMPROVED SPEECH RECOGNITION
    ============================ */
 function startNextListeningCycle() {
   if (!isContinuousMode || isSpeaking) return;
 
-  setStatus("I'm listening... 👂", "listening");
+  setStatus("Listening... 👂", "listening");
   isListening = true;
-  startListening(handleUserSpeech, { continuous: false });
+  speechBuffer = "";
+  
+  // Use improved recognition with longer timeout
+  startListening(handleUserSpeech, { 
+    continuous: false,
+    lang: "en-IN",
+    interimResults: true // Enable interim results for better capture
+  });
 }
 
-function handleUserSpeech(text) {
+function handleUserSpeech(text, isFinal = true) {
   if (!text || !text.trim()) {
-    // If no speech detected, restart listening in continuous mode
-    if (isContinuousMode) {
-      setTimeout(function() {
-        startNextListeningCycle();
-      }, 500);
+    if (isContinuousMode && isFinal) {
+      setTimeout(startNextListeningCycle, 500);
     }
     return;
   }
 
-  log("User said: " + text);
+  // Buffer speech until final result
+  if (!isFinal) {
+    speechBuffer = text;
+    return;
+  }
+
+  // Use buffered text or current text
+  const finalText = speechBuffer || text;
+  speechBuffer = "";
   
-  // Don't show user transcript on screen anymore
-  sendToBackend(text);
+  log("User said: " + finalText);
+  sendToBackend(finalText);
 }
 
 /* ============================
@@ -576,7 +466,7 @@ async function sendToBackend(text) {
   conversationHistory.push({ role: "user", content: text });
   saveConversationHistory();
 
-  setStatus("Thinking... 🤔", "thinking");
+  setStatus("Thinking... 💭", "thinking");
 
   try {
     const res = await fetch(API_URL, {
@@ -584,60 +474,98 @@ async function sendToBackend(text) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         prompt: buildPrompt(text),
-        temperature: 0.4, // Slightly higher for more natural variety
-        max_tokens: 120, // Shorter replies
+        temperature: isPracticeMode ? 0.3 : 0.5,
+        max_tokens: isPracticeMode ? 200 : 100,
       }),
     });
 
-    if (!res.ok) {
-      throw new Error("Backend error: " + res.status);
-    }
+    if (!res.ok) throw new Error("Backend error: " + res.status);
 
     const data = await res.json();
     const reply = data.reply || "I'm here for you!";
 
-    conversationHistory.push({ role: "assistant", content: reply });
-    saveConversationHistory();
-
-    const speakable = renderReplyMarkdown(reply);
-    speak(speakable);
+    if (isPracticeMode) {
+      handlePracticeMode(text, reply);
+    } else {
+      handleCasualMode(reply);
+    }
   } catch (err) {
     console.error("Backend error:", err);
-
-    setStatus("Connection issue 😅", "error");
-    speak("Sorry, I lost connection. Can you say that again?");
+    setStatus("Oops! 😅", "error");
+    speak("Sorry, I lost connection. Can you try again?");
   }
 }
 
+function handlePracticeMode(userText, reply) {
+  try {
+    // Try to parse JSON response
+    const cleaned = reply.replace(/```json\n?|\n?```/g, "").trim();
+    const parsed = JSON.parse(cleaned);
+
+    conversationHistory.push({ 
+      role: "assistant", 
+      content: parsed.reply 
+    });
+    saveConversationHistory();
+
+    // Show correction UI
+    if (parsed.correctness !== "correct") {
+      showCorrection(
+        userText,
+        parsed.corrected,
+        parsed.explanation,
+        parsed.correctness
+      );
+    } else {
+      showCorrection(userText, userText, "", "correct");
+    }
+
+    // Speak the reply
+    speak(parsed.reply);
+  } catch (e) {
+    // Fallback if JSON parsing fails
+    console.error("Failed to parse practice mode response:", e);
+    conversationHistory.push({ role: "assistant", content: reply });
+    saveConversationHistory();
+    speak(renderReplyMarkdown(reply));
+  }
+}
+
+function handleCasualMode(reply) {
+  conversationHistory.push({ role: "assistant", content: reply });
+  saveConversationHistory();
+  
+  const speakable = renderReplyMarkdown(reply);
+  speak(speakable);
+}
+
 /* ============================
-   EVENT LISTENERS (UI)
+   EVENT LISTENERS
    ============================ */
 
-// Menu Toggle
 if (menuToggle) {
-  menuToggle.addEventListener("click", function () {
+  menuToggle.addEventListener("click", () => {
     menuPanel.classList.add("active");
     menuOverlay.classList.add("active");
   });
 }
 
 if (menuClose) {
-  menuClose.addEventListener("click", function () {
+  menuClose.addEventListener("click", () => {
     menuPanel.classList.remove("active");
     menuOverlay.classList.remove("active");
   });
 }
 
 if (menuOverlay) {
-  menuOverlay.addEventListener("click", function () {
+  menuOverlay.addEventListener("click", () => {
     menuPanel.classList.remove("active");
     menuOverlay.classList.remove("active");
   });
 }
 
-// Mode Toggle
 if (modeToggle) {
-  modeToggle.addEventListener("click", function () {
+  modeToggle.addEventListener("click", () => {
     isPracticeMode = !isPracticeMode;
     modeToggle.classList.toggle("active", isPracticeMode);
 
@@ -646,36 +574,33 @@ if (modeToggle) {
       label.textContent = isPracticeMode ? "Practice Mode" : "Casual Chat";
     }
 
-    const modeText = isPracticeMode ? "Practice Mode ON! 📝" : "Casual Chat mode! 💬";
-    log(modeText);
-    setStatus(modeText, isPracticeMode ? "thinking" : "ready");
+    hideCorrection();
+    log(isPracticeMode ? "📝 Practice Mode ON" : "💬 Casual Chat ON");
+    setStatus(isPracticeMode ? "Practice Mode! 📝" : "Casual Chat! 💭", "ready");
   });
 }
 
-// Mic Button (UPDATED: toggles continuous mode)
 if (micBtn) {
-  micBtn.addEventListener("click", function () {
+  micBtn.addEventListener("click", () => {
     if (isContinuousMode) {
-      // Stop continuous mode
       isContinuousMode = false;
       stopListening();
       stopSpeech();
       isListening = false;
 
-      micBtn.classList.remove("active", "recording");
+      micBtn.classList.remove("active");
       micBtn.textContent = "🎤";
       micBtn.title = "Start conversation";
 
       setStatus("Paused 💭", "ready");
       log("Continuous mode stopped");
     } else {
-      // Start continuous mode
       isContinuousMode = true;
       micBtn.classList.add("active");
       micBtn.textContent = "⏸️";
       micBtn.title = "Pause conversation";
 
-      setStatus("I'm listening... 👂", "listening");
+      setStatus("Listening... 👂", "listening");
       log("Continuous mode started");
       
       startNextListeningCycle();
@@ -683,35 +608,32 @@ if (micBtn) {
   });
 }
 
-// Clear Button
 if (clearBtn) {
-  clearBtn.addEventListener("click", function () {
-    const confirmed = confirm("Start fresh? This will clear our chat history.");
-    if (!confirmed) return;
+  clearBtn.addEventListener("click", () => {
+    if (!confirm("Start fresh? This will clear our chat history.")) return;
 
     clearConversationStorage();
     stopSpeech();
-    hideCaption();
     hideCaptionText();
-    hideChatBubble();
+    hideCorrection();
 
     setStatus("Fresh start! 🌟", "ready");
-    log("Chat cleared - fresh start");
+    log("Chat cleared");
 
     menuPanel.classList.remove("active");
     menuOverlay.classList.remove("active");
   });
 }
 
-// Demo Lesson Button
 if (demoLessonBtn) {
-  demoLessonBtn.addEventListener("click", function () {
+  demoLessonBtn.addEventListener("click", () => {
     const challenges = [
-      "Tell me about something that made you happy today.",
-      "What's your favorite way to spend free time?",
-      "Describe someone you admire.",
-      "What's something new you'd like to learn?",
-      "Tell me about a place you'd love to visit.",
+      "Tell me about something that made you smile today!",
+      "What's your favorite hobby or thing to do?",
+      "If you could learn any new skill, what would it be?",
+      "Tell me about a friend who's important to you.",
+      "What's your favorite anime or show right now?",
+      "Describe your perfect weekend!",
     ];
 
     const challenge = challenges[Math.floor(Math.random() * challenges.length)];
@@ -726,55 +648,35 @@ if (demoLessonBtn) {
    INITIALIZATION
    ============================ */
 function initialize() {
-  log("Conversation Companion Ready! 💬");
-
-  try {
-    if (micContainer) {
-      const existingMic = document.getElementById("micBtn");
-      if (existingMic && existingMic.parentElement !== micContainer) {
-        micContainer.appendChild(existingMic);
-        document.body.classList.add("has-left-mic");
-        log("Moved mic into #mic-container");
-      }
-    }
-  } catch (e) {
-    console.warn("Mic container hookup failed", e);
-  }
+  log("Anime Companion Ready! 💬");
 
   const hasHistory = loadConversationHistory();
 
   if (hasHistory) {
     log("✅ Previous conversation restored!");
-    setStatus("Welcome back! 💭", "ready");
+    setStatus("Welcome back! 😊", "ready");
   } else {
     setStatus("Ready to chat! 💭", "ready");
   }
 
-  // Enhanced voice loading
+  // Load voices and log available options
   if (window.speechSynthesis) {
     let voices = window.speechSynthesis.getVoices();
 
-    if (voices.length > 0) {
-      log(voices.length + " voices loaded immediately");
-    } else {
-      log("Waiting for voices to load...");
-    }
-
-    window.speechSynthesis.onvoiceschanged = function () {
+    window.speechSynthesis.onvoiceschanged = () => {
       voices = window.speechSynthesis.getVoices();
       log(voices.length + " voices loaded");
-
-      voices.forEach(function (voice, i) {
-        if (voice.lang.startsWith("en")) {
-          console.log(i + ": " + voice.name + " (" + voice.lang + ")");
-        }
+      
+      // Log female voices for debugging
+      voices.filter(v => 
+        v.lang.startsWith("en") && /female|woman/i.test(v.name)
+      ).forEach(v => {
+        console.log("✓ Female voice:", v.name, v.lang);
       });
     };
 
     if (isMobileDevice()) {
-      setTimeout(function () {
-        window.speechSynthesis.getVoices();
-      }, 100);
+      setTimeout(() => window.speechSynthesis.getVoices(), 100);
     }
   }
 }
@@ -785,15 +687,11 @@ if (document.readyState === "loading") {
   initialize();
 }
 
-document.addEventListener("visibilitychange", function () {
-  if (document.hidden && isSpeaking) {
-    stopSpeech();
-  }
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden && isSpeaking) stopSpeech();
 });
 
-window.addEventListener("beforeunload", function () {
+window.addEventListener("beforeunload", () => {
   stopSpeech();
-  if (isListening) {
-    stopListening();
-  }
+  if (isListening) stopListening();
 });

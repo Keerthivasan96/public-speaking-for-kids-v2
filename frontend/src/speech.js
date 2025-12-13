@@ -1,5 +1,5 @@
 // frontend/src/speech.js
-// Improved SpeechRecognition + TTS with proper coordination
+// Improved Speech Recognition - Captures full sentences
 
 let recognition = null;
 let _onFinal = null;
@@ -7,23 +7,26 @@ let _continuous = false;
 let _isListening = false;
 let isSpeaking = false;
 let recognitionRestartTimer = null;
+let silenceTimer = null;
+let interimTranscript = "";
+let finalTranscript = "";
+
+// IMPROVED: Longer silence detection for full sentences
+const SILENCE_TIMEOUT = 1800; // 1.8 seconds of silence before finalizing
 
 /**
- * Start listening for speech.
- * Will NOT start if TTS is currently speaking.
+ * Start listening with improved full-sentence capture
  */
-export function startListening(onTextFinal, options = { continuous: false, lang: "en-IN" }) {
+export function startListening(onTextFinal, options = {}) {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SpeechRecognition) {
-    alert("Your browser does not support SpeechRecognition.");
+    alert("Your browser doesn't support speech recognition.");
     return;
   }
 
-  // CRITICAL: Do NOT start recognition while TTS is speaking
+  // Don't start if TTS is speaking
   if (isSpeaking) {
-    console.log("startListening blocked: TTS is speaking");
-    
-    // Queue for later if continuous mode
+    console.log("Recognition blocked: TTS speaking");
     if (options.continuous) {
       _onFinal = onTextFinal;
       _continuous = true;
@@ -34,13 +37,13 @@ export function startListening(onTextFinal, options = { continuous: false, lang:
   _onFinal = onTextFinal;
   _continuous = !!options.continuous;
 
-  // If already listening, just update callback
+  // If already listening, update callback
   if (recognition && _isListening) {
-    console.log("startListening: already active – updating callback");
+    console.log("Already listening - updating callback");
     return;
   }
 
-  // Clean up any existing instance
+  // Clean up existing
   try {
     if (recognition) {
       recognition.onend = null;
@@ -50,40 +53,71 @@ export function startListening(onTextFinal, options = { continuous: false, lang:
     }
   } catch (_) {}
 
-  // Clear any pending restart timers
-  if (recognitionRestartTimer) {
-    clearTimeout(recognitionRestartTimer);
-    recognitionRestartTimer = null;
-  }
+  clearTimeout(recognitionRestartTimer);
+  clearTimeout(silenceTimer);
+  
+  interimTranscript = "";
+  finalTranscript = "";
 
-  // Create new recognition instance
+  // Create new recognition
   recognition = new SpeechRecognition();
   recognition.lang = options.lang || "en-IN";
-  recognition.continuous = false; // We handle continuity manually
-  recognition.interimResults = false;
+  recognition.continuous = true; // KEEP LISTENING for full sentences
+  recognition.interimResults = true; // Get partial results
   recognition.maxAlternatives = 1;
 
   recognition.onstart = () => {
-    console.log("🎤 SpeechRecognition started");
+    console.log("🎤 Recognition started");
     _isListening = true;
     document.dispatchEvent(new CustomEvent("speechRecognitionStarted"));
   };
 
   recognition.onresult = (event) => {
-    const text = event?.results?.[0]?.[0]?.transcript || "";
-    console.log("🎤 Recognized:", text);
+    // Clear silence timer - user is still speaking
+    clearTimeout(silenceTimer);
+
+    interimTranscript = "";
     
-    if (typeof _onFinal === "function" && text.trim()) {
-      try { 
-        _onFinal(text.trim()); 
-      } catch (e) {
-        console.error("Error in recognition callback:", e);
+    // Process all results
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const transcript = event.results[i][0].transcript;
+      
+      if (event.results[i].isFinal) {
+        finalTranscript += transcript + " ";
+        console.log("🎤 Final fragment:", transcript);
+      } else {
+        interimTranscript += transcript;
+        console.log("🎤 Interim:", transcript);
       }
     }
+
+    // Start silence detection timer
+    // If user stops speaking for SILENCE_TIMEOUT ms, finalize the result
+    silenceTimer = setTimeout(() => {
+      const fullText = (finalTranscript + interimTranscript).trim();
+      
+      if (fullText && typeof _onFinal === "function") {
+        console.log("🎤 Complete sentence:", fullText);
+        
+        try {
+          _onFinal(fullText, true); // true = isFinal
+        } catch (e) {
+          console.error("Error in callback:", e);
+        }
+        
+        // Reset transcripts
+        finalTranscript = "";
+        interimTranscript = "";
+        
+        // Stop recognition (app will restart if in continuous mode)
+        stopListening();
+      }
+    }, SILENCE_TIMEOUT);
   };
 
   recognition.onerror = (e) => {
-    console.warn("SpeechRecognition error:", e.error);
+    console.warn("Recognition error:", e.error);
+    clearTimeout(silenceTimer);
     
     // Don't restart on certain errors
     if (e.error === 'aborted' || e.error === 'no-speech') {
@@ -92,54 +126,55 @@ export function startListening(onTextFinal, options = { continuous: false, lang:
   };
 
   recognition.onend = () => {
-    console.log("🎤 SpeechRecognition ended");
+    console.log("🎤 Recognition ended");
     _isListening = false;
+    clearTimeout(silenceTimer);
     document.dispatchEvent(new CustomEvent("speechRecognitionStopped"));
 
-    // Restart logic for continuous mode
+    // Auto-restart in continuous mode if not speaking
     if (_continuous && !isSpeaking) {
-      // Add delay before restarting to prevent rapid cycling
       recognitionRestartTimer = setTimeout(() => {
         try {
           if (_continuous && !isSpeaking && recognition) {
-            console.log("🔄 Restarting recognition (continuous mode)");
+            console.log("🔄 Restarting recognition");
             recognition.start();
           }
         } catch (e) {
-          console.warn("Failed to restart recognition:", e);
+          console.warn("Restart failed:", e);
           
-          // If restart fails, try recreating the instance
+          // Try recreating if restart fails
           if (_continuous && !isSpeaking) {
             setTimeout(() => {
-              startListening(_onFinal, { continuous: true, lang: options.lang });
+              startListening(_onFinal, { 
+                continuous: true, 
+                lang: options.lang,
+                interimResults: true
+              });
             }, 1000);
           }
         }
-      }, 500); // 500ms delay between recognition cycles
+      }, 500);
     }
   };
 
-  try { 
-    recognition.start(); 
-    console.log("🎤 Recognition started");
+  try {
+    recognition.start();
+    console.log("🎤 Started listening (improved mode)");
   } catch (e) {
-    console.error("Failed to start recognition:", e);
+    console.error("Failed to start:", e);
   }
 }
 
 /**
- * Stop listening and prevent auto restart.
+ * Stop listening
  */
 export function stopListening() {
   _continuous = false;
   _onFinal = null;
   _isListening = false;
 
-  // Clear restart timer
-  if (recognitionRestartTimer) {
-    clearTimeout(recognitionRestartTimer);
-    recognitionRestartTimer = null;
-  }
+  clearTimeout(recognitionRestartTimer);
+  clearTimeout(silenceTimer);
 
   if (recognition) {
     try { recognition.onend = null; } catch (_) {}
@@ -148,12 +183,15 @@ export function stopListening() {
     recognition = null;
   }
 
+  interimTranscript = "";
+  finalTranscript = "";
+
   document.dispatchEvent(new CustomEvent("speechRecognitionStopped"));
-  console.log("🎤 Listening stopped");
+  console.log("🎤 Stopped listening");
 }
 
 /**
- * Cancel TTS
+ * Stop TTS
  */
 export function stopSpeaking() {
   if (window.speechSynthesis) {
@@ -166,7 +204,7 @@ export function stopSpeaking() {
 }
 
 /**
- * Speak text (basic implementation - main app has full version)
+ * Speak text
  */
 export function speakText(text) {
   if (!text) return;
@@ -174,14 +212,14 @@ export function speakText(text) {
   stopSpeaking();
 
   if (!("speechSynthesis" in window)) {
-    console.warn("No speechSynthesis available");
+    console.warn("No TTS available");
     return;
   }
 
   const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = "en-IN";
+  utterance.lang = "en-US";
   utterance.rate = 0.95;
-  utterance.pitch = 1.2;
+  utterance.pitch = 1.22;
 
   isSpeaking = true;
   document.dispatchEvent(new CustomEvent("avatarTalkStart"));
@@ -190,11 +228,10 @@ export function speakText(text) {
     isSpeaking = false;
     document.dispatchEvent(new CustomEvent("avatarTalkStop"));
     
-    // If in continuous mode, restart listening
     if (_continuous && _onFinal) {
       setTimeout(() => {
         if (!isSpeaking && _continuous) {
-          startListening(_onFinal, { continuous: true });
+          startListening(_onFinal, { continuous: true, interimResults: true });
         }
       }, 800);
     }
@@ -215,7 +252,7 @@ export function speakText(text) {
   }
 }
 
-// Expose for global access if needed
+// Global access
 if (typeof window !== "undefined") {
   window.speakText = speakText;
   window.stopSpeaking = stopSpeaking;

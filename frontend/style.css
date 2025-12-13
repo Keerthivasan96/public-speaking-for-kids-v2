@@ -1,10 +1,10 @@
 /* ==========================================================================
-   SPIDEY - FULL-SCREEN REPLIKA-STYLE UI (Kids English Companion)
-   Immersive, clean, emotional experience
+   REPLIKA-STYLE UI - CLEAN VERSION
+   Immersive, minimal, focused conversation
    ========================================================================== */
 
 :root {
-  /* Color Palette (Keep current purple/blue theme) */
+  /* Color Palette */
   --primary: #667eea;
   --primary-dark: #5a67d8;
   --secondary: #764ba2;
@@ -100,180 +100,68 @@ html, body {
 }
 
 /* ==========================================================================
-   FLOATING CHAT BUBBLE (Bottom Center - Replika Style)
+   HIDE EXTRA PANELS (chatBubble and caption-box)
    ========================================================================== */
-.chat-bubble {
-  position: fixed;
-  bottom: 180px;
-  left: 50%;
-  transform: translateX(-50%);
-  max-width: 600px;
-  width: calc(100% - 64px);
-  z-index: 10;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.3s ease, transform 0.3s ease;
-}
-
-.chat-bubble.active {
-  opacity: 1;
-  pointer-events: auto;
-  animation: bubbleSlideUp 0.4s ease;
-}
-
-@keyframes bubbleSlideUp {
-  from {
-    opacity: 0;
-    transform: translateX(-50%) translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(-50%) translateY(0);
-  }
-}
-
-.bubble-content {
-  background: var(--surface);
-  padding: var(--space-lg) var(--space-xl);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-lg);
-  backdrop-filter: blur(10px);
-  font-size: 18px;
-  line-height: 1.6;
-  color: var(--text-primary);
-  text-align: center;
-  animation: gentleFloat 3s ease-in-out infinite;
-}
-
-@keyframes gentleFloat {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-8px); }
+.chat-bubble,
+#chatBubble,
+.bubble-content,
+.caption-box,
+#caption-box {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
 }
 
 /* ==========================================================================
-   CAPTION BOX (Speech Display)
+   MAIN CAPTION (Bottom Center - ONLY ONE)
    ========================================================================== */
-.caption-box {
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  max-width: 700px;
-  width: calc(100% - 64px);
-  z-index: 15;
-  background: var(--surface);
-  border-radius: var(--radius-md);
-  padding: var(--space-lg) var(--space-xl);
-  display: flex;
-  align-items: center;
-  gap: var(--space-md);
-  box-shadow: var(--shadow-lg);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.3s ease, transform 0.3s ease;
-}
-
-.caption-box.active {
-  opacity: 1;
-  animation: captionFadeIn 0.4s ease;
-}
-
-@keyframes captionFadeIn {
-  from {
-    opacity: 0;
-    transform: translate(-50%, calc(-50% + 20px));
-  }
-  to {
-    opacity: 1;
-    transform: translate(-50%, -50%);
-  }
-}
-
-.caption-icon {
-  font-size: 28px;
-  flex-shrink: 0;
-}
-
-.caption-text {
-  flex: 1;
-  font-size: 20px;
-  font-weight: 600;
-  line-height: 1.5;
-  color: var(--text-primary);
-  max-height: 120px;
-  overflow-y: auto;
-  overflow-x: hidden;
-}
-
-.caption-text::-webkit-scrollbar {
-  width: 4px;
-}
-
-.caption-text::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.2);
-  border-radius: 10px;
-}
-
-.caption-word {
-  display: inline;
-  transition: all 0.15s ease;
-}
-
-.caption-word.highlight {
-  background: rgba(102, 126, 234, 0.25);
-  color: var(--primary-dark);
-  font-weight: 700;
-  border-radius: 6px;
-  padding: 2px 6px;
-}
-
-/* ---------- Replika-style compact caption (bottom center) ---------- */
 .chat-caption {
   position: fixed;
   left: 50%;
-  bottom: 18px;                /* distance from bottom */
+  bottom: 100px;
   transform: translateX(-50%);
-  max-width: 86%;
-  width: min(760px, 86%);
-  padding: 10px 18px;          /* small padding */
-  background: linear-gradient( 135deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02) );
-  backdrop-filter: blur(8px) saturate(120%);
-  -webkit-backdrop-filter: blur(8px) saturate(120%);
-  border-radius: 18px;
-  border: 1px solid rgba(255,255,255,0.06);
-  box-shadow: 0 6px 22px rgba(20,20,40,0.14);
-  color: #f7f7fb;              /* light text */
-  font-size: 14px;            /* small caption text */
-  line-height: 1.35;
+  max-width: 90%;
+  width: min(700px, 90%);
+  padding: 18px 28px;
+  background: linear-gradient(135deg, rgba(255,255,255,0.98), rgba(255,255,255,0.95));
+  backdrop-filter: blur(12px) saturate(140%);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+  border-radius: 22px;
+  border: 1px solid rgba(255,255,255,0.4);
+  box-shadow: 0 12px 40px rgba(20,20,40,0.2);
+  color: var(--text-primary);
+  font-size: 17px;
+  font-weight: 500;
+  line-height: 1.5;
   text-align: center;
   z-index: 1200;
-  pointer-events: none;       /* click-through by default */
+  pointer-events: none;
   opacity: 0;
-  transform-origin: center bottom;
-  transition: transform 220ms ease, opacity 220ms ease;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* Show caption */
 .chat-caption.active {
   opacity: 1;
-  transform: translateX(-50%) translateY(0);
 }
 
-/* Smaller text on narrow screens */
-@media (max-width: 420px) {
+/* Smaller on mobile */
+@media (max-width: 480px) {
   .chat-caption { 
-    font-size: 13px;
-    padding: 9px 14px;
-    bottom: 14px;
-    border-radius: 14px;
+    font-size: 15px;
+    padding: 14px 20px;
+    bottom: 90px;
+    border-radius: 18px;
   }
 }
 
-/* ---------- Small mic button positioned bottom-left ---------- */
+/* ==========================================================================
+   MIC BUTTON - BOTTOM LEFT CORNER
+   ========================================================================== */
 #mic-container {
   position: fixed;
-  left: 18px;
-  bottom: 18px;
+  left: 20px;
+  bottom: 20px;
   z-index: 1300;
   display: flex;
   align-items: center;
@@ -282,139 +170,116 @@ html, body {
 }
 
 .mic-small {
-  width: 62px;
-  height: 62px;
+  width: 64px;
+  height: 64px;
   border-radius: 50%;
   display: inline-grid;
   place-items: center;
   border: none;
   cursor: pointer;
-  background: linear-gradient(135deg, #4caf50, #3aa04a); /* green mic */
+  background: linear-gradient(135deg, #4caf50, #3aa04a);
   color: white;
-  box-shadow: 0 10px 30px rgba(38, 165, 100, 0.18);
-  transition: transform 180ms ease, box-shadow 180ms ease, opacity 140ms ease;
+  box-shadow: 0 10px 30px rgba(38, 165, 100, 0.2);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   font-weight: 700;
-  font-size: 20px;
+  font-size: 24px;
 }
 
-/* smaller mic on mobile */
-@media (max-width: 420px) {
-  .mic-small { width: 56px; height: 56px; font-size: 18px; }
+.mic-small:hover {
+  transform: scale(1.05);
+  box-shadow: 0 12px 35px rgba(38, 165, 100, 0.3);
 }
 
-/* subtle recording pulse */
-.mic-small.recording {
-  transform: scale(1.06);
-  box-shadow: 0 18px 40px rgba(38,165,100,0.28);
+.mic-small:active {
+  transform: scale(0.98);
 }
 
-/* avoid overlap: reduce caption width when mic present at left */
-body.has-left-mic .chat-caption {
-  max-width: calc(86% - 72px);
+/* Active/recording state - RED for continuous mode */
+.mic-small.active {
+  background: linear-gradient(135deg, #ef5350, #e53935);
+  animation: micPulseGlow 2s ease-in-out infinite;
 }
 
-/* ==========================================================================
-   HERO MIC BUTTON (Center Bottom)
-   ========================================================================== */
-.hero-control {
-  position: fixed;
-  bottom: 40px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 20;
-}
-
-.hero-mic-btn {
-  width: 160px;
-  height: 160px;
-  border-radius: var(--radius-full);
-  border: none;
-  background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
-  color: var(--text-white);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-sm);
-  cursor: pointer;
-  box-shadow: var(--shadow-hero);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  font-family: inherit;
-}
-
-.hero-mic-btn:hover {
-  transform: scale(1.08);
-  box-shadow: 0 25px 70px rgba(102, 126, 234, 0.5);
-}
-
-.hero-mic-btn:active {
-  transform: scale(1.0);
-}
-
-.hero-mic-btn.active {
-  background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
-  animation: micPulse 1.5s ease-in-out infinite;
-}
-
-@keyframes micPulse {
+@keyframes micPulseGlow {
   0%, 100% {
-    box-shadow: 0 0 0 0 rgba(72, 187, 120, 0.7);
+    box-shadow: 0 10px 30px rgba(239, 83, 80, 0.4);
   }
   50% {
-    box-shadow: 0 0 0 30px rgba(72, 187, 120, 0);
+    box-shadow: 0 15px 45px rgba(239, 83, 80, 0.6);
   }
 }
 
-.mic-icon {
-  font-size: 56px;
-  display: block;
+.mic-small.recording {
+  transform: scale(1.05);
 }
 
-.mic-label {
-  font-size: 16px;
-  font-weight: 600;
-  text-transform: none;
+@media (max-width: 480px) {
+  .mic-small { 
+    width: 58px; 
+    height: 58px; 
+    font-size: 22px; 
+  }
+  
+  #mic-container {
+    left: 16px;
+    bottom: 16px;
+  }
+}
+
+/* Adjust caption width when mic is present */
+body.has-left-mic .chat-caption {
+  max-width: calc(90% - 84px);
 }
 
 /* ==========================================================================
-   STATUS MESSAGE (Top Center)
+   STATUS MESSAGE - MINIMAL & CLEAN
    ========================================================================== */
 .status-message {
   position: fixed;
-  top: 40px;
+  top: 24px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 10;
-  background: var(--surface);
-  padding: var(--space-md) var(--space-xl);
-  border-radius: var(--radius-full);
-  box-shadow: var(--shadow-md);
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  text-align: center;
-  max-width: 90%;
+  background: rgba(255, 255, 255, 0.15);
   backdrop-filter: blur(10px);
+  padding: 10px 20px;
+  border-radius: var(--radius-full);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  font-size: 14px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.95);
+  text-align: center;
+  max-width: 85%;
   transition: all 0.3s ease;
+  pointer-events: none;
+}
+
+@media (max-width: 480px) {
+  .status-message {
+    font-size: 13px;
+    padding: 8px 16px;
+    top: 16px;
+  }
 }
 
 /* ==========================================================================
-   MENU TOGGLE (Top Right)
+   MENU TOGGLE - TOP RIGHT
    ========================================================================== */
 .menu-toggle {
   position: fixed;
-  top: 40px;
-  right: 40px;
+  top: 24px;
+  right: 24px;
   z-index: 30;
-  width: 48px;
-  height: 48px;
+  width: 44px;
+  height: 44px;
   border-radius: var(--radius-full);
   border: none;
-  background: var(--surface);
-  color: var(--text-secondary);
-  font-size: 24px;
+  background: rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(10px);
+  color: white;
+  font-size: 22px;
   cursor: pointer;
-  box-shadow: var(--shadow-md);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -422,8 +287,18 @@ body.has-left-mic .chat-caption {
 }
 
 .menu-toggle:hover {
-  background: rgba(255, 255, 255, 1);
+  background: rgba(255, 255, 255, 0.3);
   transform: rotate(90deg);
+}
+
+@media (max-width: 480px) {
+  .menu-toggle {
+    top: 16px;
+    right: 16px;
+    width: 40px;
+    height: 40px;
+    font-size: 20px;
+  }
 }
 
 /* ==========================================================================
@@ -626,78 +501,190 @@ details summary {
 }
 
 /* ==========================================================================
+   PRACTICE MODE CORRECTION PANEL
+   ========================================================================== */
+.correction-panel {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  max-width: 600px;
+  width: calc(100% - 48px);
+  z-index: 1400;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.correction-panel.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.correction-card {
+  background: white;
+  border-radius: 20px;
+  padding: 24px;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.15);
+  animation: slideInUp 0.4s ease;
+}
+
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.correction-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 2px solid #f0f0f0;
+}
+
+.correction-icon {
+  font-size: 28px;
+}
+
+.correction-status {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.correction-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.correction-section {
+  padding: 16px;
+  border-radius: 12px;
+  background: #f8f9fa;
+}
+
+.correction-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+
+.correction-text {
+  font-size: 17px;
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--text-primary);
+}
+
+/* Color-coded states */
+.correction-wrong .user-said {
+  background: #fee;
+  border-left: 4px solid #ef5350;
+}
+
+.correction-wrong .correction-icon {
+  color: #ef5350;
+}
+
+.correction-almost .user-said {
+  background: #fff8e1;
+  border-left: 4px solid #ffa726;
+}
+
+.correction-almost .correction-icon {
+  color: #ffa726;
+}
+
+.correction-correct {
+  background: linear-gradient(135deg, #e8f5e9 0%, #f1f8f4 100%);
+  border: 2px solid #4caf50;
+}
+
+.correction-correct .correction-icon {
+  color: #4caf50;
+}
+
+.corrected {
+  background: #e8f5e9;
+  border-left: 4px solid #4caf50;
+}
+
+.correction-green {
+  color: #2e7d32;
+  font-weight: 600;
+}
+
+.correction-explanation {
+  padding: 16px;
+  background: #fff;
+  border-radius: 12px;
+  border-left: 3px solid var(--primary);
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.correction-celebration {
+  text-align: center;
+  font-size: 18px;
+  font-weight: 600;
+  color: #4caf50;
+  padding: 24px;
+  background: #e8f5e9;
+  border-radius: 12px;
+}
+
+/* ==========================================================================
    RESPONSIVE DESIGN
    ========================================================================== */
 @media (max-width: 768px) {
-  .hero-mic-btn {
-    width: 140px;
-    height: 140px;
-  }
-  
-  .mic-icon {
-    font-size: 48px;
-  }
-  
-  .mic-label {
-    font-size: 14px;
-  }
-  
-  .chat-bubble {
-    bottom: 160px;
-  }
-  
-  .bubble-content {
-    font-size: 16px;
-    padding: var(--space-md) var(--space-lg);
-  }
-  
-  .caption-box {
-    padding: var(--space-md) var(--space-lg);
-  }
-  
-  .caption-text {
-    font-size: 17px;
-  }
-  
-  .status-message {
-    top: 20px;
-    font-size: 14px;
-    padding: var(--space-sm) var(--space-lg);
-  }
-  
-  .menu-toggle {
-    top: 20px;
-    right: 20px;
-    width: 44px;
-    height: 44px;
-  }
-  
   .menu-panel {
     width: 100%;
     right: -100%;
   }
+  
+  .chat-caption {
+    bottom: 90px;
+  }
+
+  .correction-panel {
+    width: calc(100% - 32px);
+  }
+
+  .correction-card {
+    padding: 20px;
+  }
 }
 
 @media (max-width: 480px) {
-  .hero-mic-btn {
-    width: 120px;
-    height: 120px;
+  .chat-caption {
+    width: calc(100% - 32px);
   }
-  
-  .mic-icon {
-    font-size: 40px;
+
+  .correction-panel {
+    width: calc(100% - 24px);
   }
-  
-  .mic-label {
-    font-size: 13px;
+
+  .correction-card {
+    padding: 16px;
   }
-  
-  .chat-bubble {
-    bottom: 140px;
-    width: calc(100% - 40px);
+
+  .correction-header {
+    margin-bottom: 16px;
   }
-  
-  .caption-box {
-    width: calc(100% - 40px);
+
+  .correction-text {
+    font-size: 15px;
   }
 }

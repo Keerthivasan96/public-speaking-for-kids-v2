@@ -3,44 +3,44 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>English Learning Companion 💬</title>
+  <title>English Learning Companion ✨</title>
   
-  <!-- Clean font -->
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700&display=swap" rel="stylesheet">
-
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
   
-  <!-- FULL-SCREEN IMMERSIVE LAYOUT -->
   <div class="immersive-container">
     
-    <!-- 3D Avatar (Full Screen Background) -->
+    <!-- 3D Avatar -->
     <div id="canvas-container" aria-label="Your English Companion">
       <div id="avatar-scroll-safe"></div>
     </div>
 
-    <!-- small mic container (bottom-left) -->
+    <!-- Mic Button (bottom-left) -->
     <div id="mic-container" aria-hidden="false">
-      <button id="micBtn" class="mic-small" title="Start conversation" aria-label="Start conversation">
+      <button id="micBtn" class="mic-small" title="Start conversation">
         🎤
       </button>
     </div>
 
-    <!-- compact caption overlay (bottom center) - ONLY ONE CAPTION -->
+    <!-- AI Reply Caption (bottom center) -->
     <div id="chatCaption" class="chat-caption" role="status" aria-live="polite">
-      Ready to chat? 👋
+      Ready to chat! 💭
     </div>
 
-    <!-- Status Message (Top Center) -->
+    <!-- Practice Mode Correction Panel (center) -->
+    <div id="correctionPanel" class="correction-panel"></div>
+
+    <!-- Status (top center) -->
     <div id="status" class="status-message" aria-live="polite">
       Ready to chat! 💭
     </div>
 
-    <!-- Hidden Menu Toggle (Top Right Corner) -->
+    <!-- Menu Toggle (top right) -->
     <button id="menuToggle" class="menu-toggle" title="Options">⋮</button>
     
-    <!-- Slide-in Menu Panel -->
+    <!-- Settings Menu Panel -->
     <div id="menuPanel" class="menu-panel">
       <div class="menu-header">
         <h3>Settings</h3>
@@ -55,7 +55,7 @@
             <span class="mode-label">Casual Chat</span>
             <div class="toggle-switch"></div>
           </button>
-          <p class="menu-hint">Casual = fun chat • Practice = grammar help</p>
+          <p class="menu-hint">Casual = friendly chat • Practice = grammar help</p>
         </div>
 
         <!-- Actions -->
@@ -67,11 +67,11 @@
 
         <div class="menu-item">
           <button id="demoLessonBtn" class="menu-action-btn">
-            🎯 Daily Challenge
+            ✨ Daily Challenge
           </button>
         </div>
 
-        <!-- Debug Log (Collapsible) -->
+        <!-- Debug Log -->
         <details class="menu-item">
           <summary>Debug Log</summary>
           <div id="log" class="debug-log"></div>
@@ -79,16 +79,13 @@
       </div>
     </div>
 
-    <!-- Overlay for menu -->
+    <!-- Overlay -->
     <div id="menuOverlay" class="menu-overlay"></div>
 
   </div>
 
-  <!-- External Dependencies -->
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
-
-  <!-- App Entry Point -->
   <script type="module" src="/src/app.js"></script>
 </body>
 </html>
