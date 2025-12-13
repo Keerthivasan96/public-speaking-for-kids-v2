@@ -24,13 +24,10 @@
       </button>
     </div>
 
-    <!-- AI Reply Caption (bottom center) -->
+    <!-- AI Reply Caption (bottom center - minimalist) -->
     <div id="chatCaption" class="chat-caption" role="status" aria-live="polite">
       Ready to chat! 💭
     </div>
-
-    <!-- Practice Mode Correction Panel (center) -->
-    <div id="correctionPanel" class="correction-panel"></div>
 
     <!-- Status (top center) -->
     <div id="status" class="status-message" aria-live="polite">
@@ -56,6 +53,12 @@
             <div class="toggle-switch"></div>
           </button>
           <p class="menu-hint">Casual = friendly chat • Practice = grammar help</p>
+        </div>
+
+        <!-- Practice Mode Corrections (Only visible in Practice Mode) -->
+        <div id="correctionDisplay" class="menu-item" style="display: none;">
+          <label>Latest Correction</label>
+          <div id="correctionContent" class="correction-display"></div>
         </div>
 
         <!-- Actions -->

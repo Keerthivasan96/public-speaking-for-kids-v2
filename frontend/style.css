@@ -114,31 +114,31 @@ html, body {
 }
 
 /* ==========================================================================
-   MAIN CAPTION (Bottom Center - ONLY ONE)
+   MAIN CAPTION (Bottom Center - Minimalist & Elegant)
    ========================================================================== */
 .chat-caption {
   position: fixed;
   left: 50%;
-  bottom: 100px;
+  bottom: 24px;
   transform: translateX(-50%);
-  max-width: 90%;
-  width: min(700px, 90%);
-  padding: 18px 28px;
-  background: linear-gradient(135deg, rgba(255,255,255,0.98), rgba(255,255,255,0.95));
-  backdrop-filter: blur(12px) saturate(140%);
-  -webkit-backdrop-filter: blur(12px) saturate(140%);
-  border-radius: 22px;
-  border: 1px solid rgba(255,255,255,0.4);
-  box-shadow: 0 12px 40px rgba(20,20,40,0.2);
-  color: var(--text-primary);
-  font-size: 17px;
+  max-width: 85%;
+  width: min(650px, 85%);
+  padding: 12px 20px;
+  background: linear-gradient(135deg, rgba(255,255,255,0.12), rgba(255,255,255,0.08));
+  backdrop-filter: blur(16px) saturate(150%);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  border-radius: 20px;
+  border: 1px solid rgba(255,255,255,0.15);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+  color: rgba(255, 255, 255, 0.95);
+  font-size: 15px;
   font-weight: 500;
-  line-height: 1.5;
+  line-height: 1.4;
   text-align: center;
   z-index: 1200;
   pointer-events: none;
   opacity: 0;
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .chat-caption.active {
@@ -148,10 +148,11 @@ html, body {
 /* Smaller on mobile */
 @media (max-width: 480px) {
   .chat-caption { 
-    font-size: 15px;
-    padding: 14px 20px;
-    bottom: 90px;
-    border-radius: 18px;
+    font-size: 14px;
+    padding: 10px 16px;
+    bottom: 20px;
+    border-radius: 16px;
+    max-width: calc(100% - 100px);
   }
 }
 
@@ -501,148 +502,75 @@ details summary {
 }
 
 /* ==========================================================================
-   PRACTICE MODE CORRECTION PANEL
+   PRACTICE MODE CORRECTION PANEL (INSIDE MENU - NOT BLOCKING AVATAR)
    ========================================================================== */
 .correction-panel {
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  max-width: 600px;
-  width: calc(100% - 48px);
-  z-index: 1400;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.3s ease, transform 0.3s ease;
+  display: none; /* Corrections shown in menu panel instead */
 }
 
-.correction-panel.active {
-  opacity: 1;
-  pointer-events: auto;
+/* Correction display inside menu */
+.correction-display {
+  margin-top: 16px;
+  padding: 16px;
+  background: #f8f9fa;
+  border-radius: 12px;
+  border-left: 3px solid var(--primary);
 }
 
-.correction-card {
-  background: white;
-  border-radius: 20px;
-  padding: 24px;
-  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.15);
-  animation: slideInUp 0.4s ease;
+.correction-display.correction-wrong {
+  background: #fee;
+  border-left-color: #ef5350;
 }
 
-@keyframes slideInUp {
-  from {
-    opacity: 0;
-    transform: translateY(30px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+.correction-display.correction-almost {
+  background: #fff8e1;
+  border-left-color: #ffa726;
 }
 
-.correction-header {
+.correction-display.correction-correct {
+  background: #e8f5e9;
+  border-left-color: #4caf50;
+}
+
+.correction-display-header {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 20px;
-  padding-bottom: 16px;
-  border-bottom: 2px solid #f0f0f0;
-}
-
-.correction-icon {
-  font-size: 28px;
-}
-
-.correction-status {
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-.correction-content {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.correction-section {
-  padding: 16px;
-  border-radius: 12px;
-  background: #f8f9fa;
-}
-
-.correction-label {
-  font-size: 13px;
+  gap: 8px;
+  margin-bottom: 12px;
   font-weight: 600;
+  font-size: 14px;
+}
+
+.correction-display-content {
+  font-size: 13px;
+  line-height: 1.5;
   color: var(--text-secondary);
+}
+
+.correction-display-section {
+  margin: 8px 0;
+  padding: 8px;
+  background: white;
+  border-radius: 8px;
+}
+
+.correction-display-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-light);
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
 }
 
-.correction-text {
-  font-size: 17px;
-  font-weight: 500;
-  line-height: 1.5;
+.correction-display-text {
+  font-size: 13px;
   color: var(--text-primary);
-}
-
-/* Color-coded states */
-.correction-wrong .user-said {
-  background: #fee;
-  border-left: 4px solid #ef5350;
-}
-
-.correction-wrong .correction-icon {
-  color: #ef5350;
-}
-
-.correction-almost .user-said {
-  background: #fff8e1;
-  border-left: 4px solid #ffa726;
-}
-
-.correction-almost .correction-icon {
-  color: #ffa726;
-}
-
-.correction-correct {
-  background: linear-gradient(135deg, #e8f5e9 0%, #f1f8f4 100%);
-  border: 2px solid #4caf50;
-}
-
-.correction-correct .correction-icon {
-  color: #4caf50;
-}
-
-.corrected {
-  background: #e8f5e9;
-  border-left: 4px solid #4caf50;
 }
 
 .correction-green {
   color: #2e7d32;
   font-weight: 600;
-}
-
-.correction-explanation {
-  padding: 16px;
-  background: #fff;
-  border-radius: 12px;
-  border-left: 3px solid var(--primary);
-  font-size: 15px;
-  line-height: 1.6;
-  color: var(--text-secondary);
-}
-
-.correction-celebration {
-  text-align: center;
-  font-size: 18px;
-  font-weight: 600;
-  color: #4caf50;
-  padding: 24px;
-  background: #e8f5e9;
-  border-radius: 12px;
 }
 
 /* ==========================================================================

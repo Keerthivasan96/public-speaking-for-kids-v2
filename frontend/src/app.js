@@ -26,7 +26,8 @@ const modeToggle = document.getElementById("modeToggle");
 const statusEl = document.getElementById("status");
 const logEl = document.getElementById("log");
 const chatCaption = document.getElementById("chatCaption");
-const correctionPanel = document.getElementById("correctionPanel");
+const correctionDisplay = document.getElementById("correctionDisplay");
+const correctionContent = document.getElementById("correctionContent");
 
 /* ============================
    STATE
@@ -112,10 +113,10 @@ function hideCaptionText() {
 }
 
 /* ============================
-   PRACTICE MODE - CORRECTION UI
+   PRACTICE MODE - CORRECTION IN MENU
    ============================ */
 function showCorrection(userText, correctedText, explanation, correctness) {
-  if (!correctionPanel) return;
+  if (!correctionContent || !correctionDisplay) return;
 
   let statusClass = "";
   let statusIcon = "";
@@ -128,56 +129,58 @@ function showCorrection(userText, correctedText, explanation, correctness) {
   } else if (correctness === "almost") {
     statusClass = "correction-almost";
     statusIcon = "⚠️";
-    statusText = "Almost right!";
+    statusText = "Almost!";
   } else {
     statusClass = "correction-wrong";
     statusIcon = "❌";
-    statusText = "Let's fix this";
+    statusText = "Let's fix";
   }
 
   const html = `
-    <div class="correction-card ${statusClass}">
-      <div class="correction-header">
-        <span class="correction-icon">${statusIcon}</span>
-        <span class="correction-status">${statusText}</span>
+    <div class="${statusClass}">
+      <div class="correction-display-header">
+        <span>${statusIcon}</span>
+        <span>${statusText}</span>
       </div>
       
-      <div class="correction-content">
-        <div class="correction-section user-said">
-          <div class="correction-label">You said:</div>
-          <div class="correction-text">"${escapeHtml(userText)}"</div>
+      <div class="correction-display-content">
+        <div class="correction-display-section">
+          <div class="correction-display-label">You said:</div>
+          <div class="correction-display-text">"${escapeHtml(userText)}"</div>
         </div>
         
         ${correctness !== "correct" ? `
-          <div class="correction-section corrected">
-            <div class="correction-label">Corrected:</div>
-            <div class="correction-text correction-green">"${escapeHtml(correctedText)}"</div>
+          <div class="correction-display-section">
+            <div class="correction-display-label">Corrected:</div>
+            <div class="correction-display-text correction-green">"${escapeHtml(correctedText)}"</div>
           </div>
           
-          <div class="correction-explanation">
+          <div style="margin-top: 8px; font-size: 12px; color: #666;">
             ${escapeHtml(explanation)}
           </div>
         ` : `
-          <div class="correction-celebration">
-            Great job! You said it perfectly! 🎉
+          <div style="text-align: center; color: #4caf50; font-weight: 600; margin-top: 8px;">
+            Perfect! 🎉
           </div>
         `}
       </div>
     </div>
   `;
 
-  correctionPanel.innerHTML = html;
-  correctionPanel.classList.add("active");
+  correctionContent.innerHTML = html;
+  correctionDisplay.style.display = "block";
 
-  // Auto-hide after 8 seconds
-  setTimeout(() => {
-    correctionPanel.classList.remove("active");
-  }, 8000);
+  // Scroll menu to show correction
+  if (menuPanel && menuPanel.classList.contains("active")) {
+    setTimeout(() => {
+      correctionDisplay.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }, 100);
+  }
 }
 
 function hideCorrection() {
-  if (!correctionPanel) return;
-  correctionPanel.classList.remove("active");
+  if (!correctionDisplay) return;
+  correctionDisplay.style.display = "none";
 }
 
 /* ============================
