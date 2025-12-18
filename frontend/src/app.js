@@ -1,7 +1,6 @@
 // ============================================
-// app.js - 3D MODE VERSION
+// app.js - WITH MUSIC SUPPORT
 // LOCATION: frontend/src/app.js
-// ACTION: REPLACE YOUR EXISTING app.js
 // ============================================
 
 import { startListening, stopListening } from "./speech.js";
@@ -9,7 +8,10 @@ import {
   init3DScene, 
   loadVRMAvatar, 
   avatarStartTalking, 
-  avatarStopTalking 
+  avatarStopTalking,
+  loadRoomModel,
+  addProp,
+  setSkyColors
 } from "./threejs-avatar-3d.js";
 
 const API_URL = "https://public-speaking-for-kids-backend-v2.vercel.app/api/generate";
@@ -21,7 +23,7 @@ const IS_MOBILE = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini
 const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
 const IS_ANDROID = /Android/i.test(navigator.userAgent);
 
-console.log(`📱 Device: ${IS_MOBILE ? 'Mobile' : 'Desktop'}`, { iOS: IS_IOS, Android: IS_ANDROID });
+console.log(`📱 Device: ${IS_MOBILE ? 'Mobile' : 'Desktop'}`);
 
 // ============================================
 // UI ELEMENTS
@@ -34,6 +36,8 @@ const menuClose = document.getElementById("menuClose");
 const clearBtn = document.getElementById("clearBtn");
 const demoLessonBtn = document.getElementById("demoLessonBtn");
 const modeToggle = document.getElementById("modeToggle");
+const musicToggle = document.getElementById("musicToggle");
+const musicVolumeSlider = document.getElementById("musicVolume");
 
 const statusEl = document.getElementById("status");
 const logEl = document.getElementById("log");
@@ -41,7 +45,6 @@ const chatCaption = document.getElementById("chatCaption");
 const correctionDisplay = document.getElementById("correctionDisplay");
 const correctionContent = document.getElementById("correctionContent");
 
-// Avatar selection
 const avatarOptions = document.querySelectorAll(".avatar-option");
 
 // ============================================
@@ -55,14 +58,21 @@ let conversationHistory = [];
 let isPracticeMode = false;
 let speechBuffer = "";
 
-// Current avatar path
+// Avatar
 let currentAvatarPath = "/assets/vrmavatar1.vrm";
 
+// Music
+let backgroundMusic = null;
+let isMusicPlaying = false;
+let musicVolume = 0.3;
+
 // ============================================
-// STORAGE
+// STORAGE KEYS
 // ============================================
 const STORAGE_KEY = "anime_companion_history";
 const AVATAR_KEY = "anime_companion_avatar";
+const MUSIC_KEY = "anime_companion_music";
+const VOLUME_KEY = "anime_companion_volume";
 const MAX_HISTORY_ITEMS = 200;
 
 // ============================================
@@ -78,14 +88,14 @@ function log(msg) {
 }
 
 // ============================================
-// LOCAL STORAGE
+// STORAGE FUNCTIONS
 // ============================================
 function saveConversationHistory() {
   try {
     const historyToSave = conversationHistory.slice(-MAX_HISTORY_ITEMS);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(historyToSave));
   } catch (err) {
-    console.error("Failed to save:", err);
+    console.error("Save failed:", err);
   }
 }
 
@@ -98,7 +108,7 @@ function loadConversationHistory() {
       return true;
     }
   } catch (err) {
-    console.error("Failed to load:", err);
+    console.error("Load failed:", err);
   }
   return false;
 }
@@ -109,7 +119,7 @@ function clearConversationStorage() {
     conversationHistory = [];
     log("🗑️ Cleared");
   } catch (err) {
-    console.error("Failed to clear:", err);
+    console.error("Clear failed:", err);
   }
 }
 
@@ -119,6 +129,127 @@ function saveAvatarChoice(path) {
 
 function loadAvatarChoice() {
   return localStorage.getItem(AVATAR_KEY) || "/assets/vrmavatar1.vrm";
+}
+
+function saveMusicState(playing) {
+  localStorage.setItem(MUSIC_KEY, playing ? "on" : "off");
+}
+
+function loadMusicState() {
+  return localStorage.getItem(MUSIC_KEY) === "on";
+}
+
+function saveMusicVolume(vol) {
+  localStorage.setItem(VOLUME_KEY, vol.toString());
+}
+
+function loadMusicVolume() {
+  const saved = localStorage.getItem(VOLUME_KEY);
+  return saved ? parseFloat(saved) : 0.3;
+}
+
+// ============================================
+// MUSIC PLAYER
+// ============================================
+function initMusic() {
+  // Create audio element
+  backgroundMusic = new Audio();
+  backgroundMusic.loop = true;
+  backgroundMusic.volume = musicVolume;
+  
+  // Try to load music file
+  // Will use first available: ambient1.mp3, background.mp3, or music.mp3
+  const musicFiles = [
+    "/assets/music/ambient.mp3",
+    "/assets/music/background.mp3",
+    "/assets/music/lofi.mp3"
+  ];
+  
+  backgroundMusic.src = musicFiles[0];
+  
+  backgroundMusic.onerror = () => {
+    console.log("[Music] Primary music file not found, trying next...");
+    // Try next file
+    const currentIndex = musicFiles.indexOf(backgroundMusic.src.replace(window.location.origin, ""));
+    if (currentIndex < musicFiles.length - 1) {
+      backgroundMusic.src = musicFiles[currentIndex + 1];
+    } else {
+      console.log("[Music] No music files found");
+    }
+  };
+
+  backgroundMusic.oncanplaythrough = () => {
+    console.log("[Music] ✅ Music loaded");
+  };
+
+  // Load saved state
+  musicVolume = loadMusicVolume();
+  backgroundMusic.volume = musicVolume;
+  
+  if (musicVolumeSlider) {
+    musicVolumeSlider.value = musicVolume * 100;
+  }
+
+  // Auto-play if was playing before (needs user interaction first)
+  if (loadMusicState()) {
+    // Will play after first user interaction
+    document.addEventListener("click", () => {
+      if (loadMusicState() && !isMusicPlaying) {
+        playMusic();
+      }
+    }, { once: true });
+  }
+}
+
+function playMusic() {
+  if (!backgroundMusic) return;
+  
+  backgroundMusic.play()
+    .then(() => {
+      isMusicPlaying = true;
+      saveMusicState(true);
+      updateMusicToggleUI();
+      log("🎵 Music playing");
+    })
+    .catch(err => {
+      console.log("[Music] Play failed:", err);
+    });
+}
+
+function pauseMusic() {
+  if (!backgroundMusic) return;
+  
+  backgroundMusic.pause();
+  isMusicPlaying = false;
+  saveMusicState(false);
+  updateMusicToggleUI();
+  log("🔇 Music paused");
+}
+
+function toggleMusic() {
+  if (isMusicPlaying) {
+    pauseMusic();
+  } else {
+    playMusic();
+  }
+}
+
+function setMusicVolume(vol) {
+  musicVolume = Math.max(0, Math.min(1, vol));
+  if (backgroundMusic) {
+    backgroundMusic.volume = musicVolume;
+  }
+  saveMusicVolume(musicVolume);
+}
+
+function updateMusicToggleUI() {
+  if (musicToggle) {
+    musicToggle.classList.toggle("active", isMusicPlaying);
+    const label = musicToggle.querySelector(".mode-label");
+    if (label) {
+      label.textContent = isMusicPlaying ? "Music On" : "Music Off";
+    }
+  }
 }
 
 // ============================================
@@ -136,7 +267,7 @@ function hideCaptionText() {
 }
 
 // ============================================
-// PRACTICE MODE CORRECTION
+// CORRECTION DISPLAY
 // ============================================
 function showCorrection(userText, correctedText, explanation, correctness) {
   if (!correctionContent || !correctionDisplay) return;
@@ -313,7 +444,7 @@ function selectBestVoice() {
 }
 
 // ============================================
-// TTS (Text to Speech)
+// TTS
 // ============================================
 function speak(text) {
   if (!text || !text.trim()) return;
@@ -343,14 +474,22 @@ function speak(text) {
     avatarStartTalking();
     showCaptionText(cleanText);
     setStatus("💬", "speaking");
-    log("🔊 Speaking...");
+    
+    // Lower music volume while speaking
+    if (backgroundMusic && isMusicPlaying) {
+      backgroundMusic.volume = musicVolume * 0.3;
+    }
   };
 
   utter.onend = () => {
     isSpeaking = false;
     avatarStopTalking();
     hideCaptionText();
-    log("🔇 Done");
+    
+    // Restore music volume
+    if (backgroundMusic && isMusicPlaying) {
+      backgroundMusic.volume = musicVolume;
+    }
 
     if (isContinuousMode) {
       const delay = IS_MOBILE ? 1200 : 800;
@@ -365,6 +504,10 @@ function speak(text) {
     isSpeaking = false;
     avatarStopTalking();
     hideCaptionText();
+    
+    if (backgroundMusic && isMusicPlaying) {
+      backgroundMusic.volume = musicVolume;
+    }
     
     if (isContinuousMode) {
       setTimeout(startNextListeningCycle, 1500);
@@ -399,8 +542,6 @@ function startNextListeningCycle() {
   isListening = true;
   speechBuffer = "";
   
-  log("🎤 Listening...");
-  
   startListening(handleUserSpeech, {
     continuous: false,
     lang: "en-IN",
@@ -426,12 +567,11 @@ function handleUserSpeech(text, isFinal = true) {
   const finalText = speechBuffer || text;
   speechBuffer = "";
   
-  log("✅ " + finalText);
   sendToBackend(finalText);
 }
 
 // ============================================
-// BACKEND COMMUNICATION
+// BACKEND
 // ============================================
 async function sendToBackend(text) {
   if (!text || !text.trim()) return;
@@ -502,7 +642,7 @@ function handleCasualMode(reply) {
 // AVATAR SWITCHING
 // ============================================
 async function switchAvatar(avatarPath) {
-  log("🔄 Switching avatar: " + avatarPath);
+  log("🔄 Switching: " + avatarPath);
   currentAvatarPath = avatarPath;
   saveAvatarChoice(avatarPath);
   
@@ -510,8 +650,8 @@ async function switchAvatar(avatarPath) {
     await loadVRMAvatar(avatarPath);
     log("✅ Avatar loaded!");
   } catch (err) {
-    console.error("Avatar load failed:", err);
-    log("❌ Avatar failed: " + err.message);
+    console.error("Avatar failed:", err);
+    log("❌ Failed: " + err.message);
   }
 }
 
@@ -519,7 +659,7 @@ async function switchAvatar(avatarPath) {
 // EVENT LISTENERS
 // ============================================
 
-// Menu toggle
+// Menu
 if (menuToggle) {
   menuToggle.addEventListener("click", () => {
     menuPanel.classList.add("active");
@@ -541,7 +681,7 @@ if (menuOverlay) {
   });
 }
 
-// Practice mode toggle
+// Practice mode
 if (modeToggle) {
   modeToggle.addEventListener("click", () => {
     isPracticeMode = !isPracticeMode;
@@ -554,7 +694,18 @@ if (modeToggle) {
 
     hideCorrection();
     log(isPracticeMode ? "📝 Practice Mode" : "💬 Casual Chat");
-    setStatus(isPracticeMode ? "Practice Mode! 📝" : "Casual Chat! 💭", "ready");
+  });
+}
+
+// Music toggle
+if (musicToggle) {
+  musicToggle.addEventListener("click", toggleMusic);
+}
+
+// Music volume
+if (musicVolumeSlider) {
+  musicVolumeSlider.addEventListener("input", (e) => {
+    setMusicVolume(e.target.value / 100);
   });
 }
 
@@ -562,7 +713,6 @@ if (modeToggle) {
 if (micBtn) {
   micBtn.addEventListener("click", () => {
     if (isContinuousMode) {
-      // STOP
       isContinuousMode = false;
       stopListening();
       stopSpeech();
@@ -570,29 +720,21 @@ if (micBtn) {
 
       micBtn.classList.remove("active");
       micBtn.textContent = "🎤";
-      micBtn.title = "Start conversation";
-
       setStatus("Paused 💭", "ready");
-      log("⏸️ Paused");
     } else {
-      // START
       isContinuousMode = true;
       micBtn.classList.add("active");
       micBtn.textContent = "⏸️";
-      micBtn.title = "Pause conversation";
-
       setStatus("Listening... 👂", "listening");
-      log("▶️ Started");
-      
       startNextListeningCycle();
     }
   });
 }
 
-// Clear button
+// Clear
 if (clearBtn) {
   clearBtn.addEventListener("click", () => {
-    if (!confirm("Start fresh? This will clear chat history.")) return;
+    if (!confirm("Start fresh?")) return;
 
     clearConversationStorage();
     stopSpeech();
@@ -600,22 +742,21 @@ if (clearBtn) {
     hideCorrection();
 
     setStatus("Fresh start! 🌟", "ready");
-    log("🗑️ Cleared");
 
     menuPanel.classList.remove("active");
     menuOverlay.classList.remove("active");
   });
 }
 
-// Demo lesson button
+// Demo lesson
 if (demoLessonBtn) {
   demoLessonBtn.addEventListener("click", () => {
     const challenges = [
       "Tell me about something that made you smile today!",
-      "What's your favorite hobby or thing to do?",
-      "If you could learn any new skill, what would it be?",
+      "What's your favorite hobby?",
+      "If you could learn any skill, what would it be?",
       "Tell me about a friend who's important to you.",
-      "What's your favorite anime or show right now?",
+      "What's your favorite anime or show?",
       "Describe your perfect weekend!",
     ];
 
@@ -630,9 +771,7 @@ if (demoLessonBtn) {
 // Avatar selection
 avatarOptions.forEach(btn => {
   btn.addEventListener("click", () => {
-    // Remove active from all
     avatarOptions.forEach(b => b.classList.remove("active"));
-    // Add active to clicked
     btn.classList.add("active");
     
     const avatarPath = btn.dataset.avatar;
@@ -646,13 +785,12 @@ avatarOptions.forEach(btn => {
 // INITIALIZATION
 // ============================================
 async function initialize() {
-  log("🚀 Starting 3D Companion...");
+  log("🚀 Starting...");
 
-  // Load saved avatar choice
+  // Load avatar choice
   currentAvatarPath = loadAvatarChoice();
-  log("📁 Avatar: " + currentAvatarPath);
 
-  // Initialize 3D scene
+  // Init 3D scene
   const sceneReady = init3DScene("canvas-container");
   if (!sceneReady) {
     log("❌ 3D scene failed!");
@@ -665,25 +803,25 @@ async function initialize() {
     log("✅ Avatar loaded!");
   } catch (err) {
     console.error("Avatar error:", err);
-    log("⚠️ Avatar failed, trying fallback...");
-    
-    // Try fallback avatar
     try {
       await loadVRMAvatar("/assets/vrmavatar1.vrm");
-      log("✅ Fallback avatar loaded");
     } catch (err2) {
-      log("❌ All avatars failed: " + err2.message);
+      log("❌ All avatars failed");
     }
   }
 
-  // Mark active avatar in UI
+  // Mark active avatar
   avatarOptions.forEach(btn => {
     if (btn.dataset.avatar === currentAvatarPath) {
       btn.classList.add("active");
     }
   });
 
-  // Load conversation history
+  // Init music
+  initMusic();
+  updateMusicToggleUI();
+
+  // Load history
   const hasHistory = loadConversationHistory();
   if (hasHistory) {
     setStatus("Welcome back! 😊", "ready");
@@ -705,13 +843,12 @@ async function initialize() {
     }
   }
 
-  // Request mic permission on mobile
+  // Mic permission
   if (IS_MOBILE && navigator.mediaDevices?.getUserMedia) {
     try {
       await navigator.mediaDevices.getUserMedia({ audio: true });
       log("✅ Mic allowed");
     } catch (err) {
-      console.error("Mic denied:", err);
       alert("Please allow microphone access.");
     }
   }
@@ -719,14 +856,14 @@ async function initialize() {
   log("✅ Ready!");
 }
 
-// Start app
+// Start
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", initialize);
 } else {
   initialize();
 }
 
-// Cleanup on page hide/close
+// Cleanup
 document.addEventListener("visibilitychange", () => {
   if (document.hidden && isSpeaking) stopSpeech();
 });

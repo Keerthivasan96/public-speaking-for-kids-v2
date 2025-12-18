@@ -1,7 +1,5 @@
 /* ============================================
-   style.css - 3D MODE VERSION
-   LOCATION: frontend/style.css
-   ACTION: REPLACE YOUR EXISTING style.css
+   style.css - WITH MUSIC CONTROLS
    ============================================ */
 
 :root {
@@ -37,9 +35,6 @@
   --glass-blur: blur(12px);
 }
 
-/* ============================================
-   BASE RESET
-   ============================================ */
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
@@ -52,7 +47,6 @@ html, body {
   overflow: hidden;
   font-family: 'Nunito', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
 }
 
 body {
@@ -60,7 +54,7 @@ body {
 }
 
 /* ============================================
-   IMMERSIVE CONTAINER
+   CONTAINER
    ============================================ */
 .immersive-container {
   position: fixed;
@@ -72,9 +66,6 @@ body {
   overflow: hidden;
 }
 
-/* ============================================
-   CANVAS CONTAINER (3D Scene)
-   ============================================ */
 #canvas-container {
   position: absolute;
   inset: 0;
@@ -95,7 +86,7 @@ body {
 }
 
 /* ============================================
-   LOADING INDICATOR
+   LOADING
    ============================================ */
 .loading-indicator {
   position: absolute;
@@ -157,7 +148,6 @@ body {
 
 .mic-small:hover {
   transform: scale(1.08);
-  box-shadow: var(--shadow-lg), 0 0 30px rgba(72, 187, 120, 0.6);
 }
 
 .mic-small:active {
@@ -181,7 +171,7 @@ body {
 }
 
 /* ============================================
-   CHAT CAPTION (Bottom Glass Panel)
+   CAPTION
    ============================================ */
 .chat-caption {
   position: fixed;
@@ -204,7 +194,6 @@ body {
   font-size: 16px;
   line-height: 1.5;
   text-align: center;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
   
   opacity: 0;
   transform: translateX(-50%) translateY(20px);
@@ -218,7 +207,7 @@ body {
 }
 
 /* ============================================
-   STATUS MESSAGE (Top Center)
+   STATUS
    ============================================ */
 .status-message {
   position: fixed;
@@ -230,18 +219,16 @@ body {
   padding: 8px 20px;
   background: rgba(0, 0, 0, 0.5);
   backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
   border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: var(--radius-full);
   
   color: white;
   font-size: 14px;
   font-weight: 600;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
 /* ============================================
-   MENU TOGGLE BUTTON (Top Right)
+   MENU TOGGLE
    ============================================ */
 .menu-toggle {
   position: fixed;
@@ -254,7 +241,6 @@ body {
   border-radius: var(--radius-full);
   background: rgba(0, 0, 0, 0.4);
   backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
   border: 1px solid rgba(255, 255, 255, 0.15);
   
   color: white;
@@ -272,7 +258,7 @@ body {
 }
 
 /* ============================================
-   MENU PANEL (Slide-in from Right)
+   MENU PANEL
    ============================================ */
 .menu-overlay {
   position: fixed;
@@ -340,7 +326,6 @@ body {
 
 .menu-close:hover {
   background: #eee;
-  color: var(--text-primary);
 }
 
 .menu-content {
@@ -416,6 +401,57 @@ body {
 }
 
 /* ============================================
+   VOLUME CONTROL
+   ============================================ */
+.volume-control {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: #f5f5f5;
+  border-radius: var(--radius-md);
+}
+
+.volume-icon {
+  font-size: 18px;
+}
+
+.volume-slider {
+  flex: 1;
+  height: 6px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: #ddd;
+  border-radius: 3px;
+  outline: none;
+}
+
+.volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  background: var(--primary);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.volume-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
+
+.volume-slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  background: var(--primary);
+  border-radius: 50%;
+  cursor: pointer;
+  border: none;
+}
+
+/* ============================================
    MODE TOGGLE BUTTONS
    ============================================ */
 .mode-toggle-btn {
@@ -433,7 +469,6 @@ body {
 
 .mode-toggle-btn:hover {
   border-color: rgba(102, 126, 234, 0.3);
-  background: rgba(102, 126, 234, 0.08);
 }
 
 .mode-label {
@@ -478,7 +513,7 @@ body {
 }
 
 /* ============================================
-   MENU ACTION BUTTONS
+   ACTION BUTTONS
    ============================================ */
 .menu-action-btn {
   width: 100%;
@@ -528,7 +563,7 @@ details summary {
 }
 
 /* ============================================
-   CORRECTION DISPLAY (Practice Mode)
+   CORRECTION DISPLAY
    ============================================ */
 .correction-display {
   margin-top: 8px;
@@ -595,7 +630,7 @@ details summary {
 }
 
 /* ============================================
-   RESPONSIVE DESIGN
+   RESPONSIVE
    ============================================ */
 @media (max-width: 768px) {
   .menu-panel {
@@ -620,15 +655,6 @@ details summary {
     height: 52px;
     font-size: 22px;
   }
-
-  .avatar-grid {
-    grid-template-columns: repeat(4, 1fr);
-    gap: 8px;
-  }
-  
-  .avatar-emoji {
-    font-size: 24px;
-  }
 }
 
 @media (max-width: 480px) {
@@ -641,14 +667,5 @@ details summary {
   .status-message {
     font-size: 12px;
     padding: 6px 14px;
-  }
-
-  .menu-header {
-    padding: var(--space-md);
-  }
-
-  .menu-content {
-    padding: var(--space-md);
-    gap: var(--space-md);
   }
 }
