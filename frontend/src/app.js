@@ -1,6 +1,6 @@
 // ============================================
-// app.js - ROOM LOADS BY DEFAULT
-// LOCATION: frontend/src/app.js
+// app.js - COMPLETE VERSION
+// Room loads by default, all features included
 // ============================================
 
 import { startListening, stopListening } from "./speech.js";
@@ -10,17 +10,23 @@ import {
   avatarStartTalking, 
   avatarStopTalking,
   loadRoomModel,
-  removeRoom,
+  useFallbackEnvironment,
   hasRoom,
-  setRoomMode
+  setExpression,
+  setSkyColors
 } from "./threejs-avatar-3d.js";
 
+// Backend API URL
 const API_URL = "https://public-speaking-for-kids-backend-v2.vercel.app/api/generate";
 
-// Device detection
+// ============================================
+// DEVICE DETECTION
+// ============================================
 const IS_MOBILE = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
 const IS_ANDROID = /Android/i.test(navigator.userAgent);
+
+console.log(`📱 Device: ${IS_MOBILE ? 'Mobile' : 'Desktop'}, iOS: ${IS_IOS}, Android: ${IS_ANDROID}`);
 
 // ============================================
 // UI ELEMENTS
@@ -35,7 +41,6 @@ const demoLessonBtn = document.getElementById("demoLessonBtn");
 const modeToggle = document.getElementById("modeToggle");
 const musicToggle = document.getElementById("musicToggle");
 const musicVolumeSlider = document.getElementById("musicVolume");
-const roomToggle = document.getElementById("roomToggle");
 
 const statusEl = document.getElementById("status");
 const logEl = document.getElementById("log");
@@ -46,365 +51,622 @@ const correctionContent = document.getElementById("correctionContent");
 const avatarOptions = document.querySelectorAll(".avatar-option");
 
 // ============================================
-// STATE
+// APPLICATION STATE
 // ============================================
 let isListening = false;
 let isSpeaking = false;
 let isContinuousMode = false;
+let lastSpokenText = "";
 let conversationHistory = [];
 let isPracticeMode = false;
 let speechBuffer = "";
 
-// Avatar
+// Avatar state
 let currentAvatarPath = "/assets/vrmavatar1.vrm";
 
-// Music
+// Music state
 let backgroundMusic = null;
 let isMusicPlaying = false;
 let musicVolume = 0.3;
 
-// Room - DEFAULT ON
-let isRoomEnabled = true;
+// ============================================
+// STORAGE KEYS
+// ============================================
+const STORAGE_KEY = "companion_conversation_history";
+const AVATAR_KEY = "companion_selected_avatar";
+const MUSIC_KEY = "companion_music_enabled";
+const VOLUME_KEY = "companion_music_volume";
+const MAX_HISTORY_ITEMS = 200;
 
 // ============================================
-// STORAGE
+// LOGGING UTILITY
 // ============================================
-const STORAGE_KEY = "companion_history";
-const AVATAR_KEY = "companion_avatar";
-const MUSIC_KEY = "companion_music";
-const VOLUME_KEY = "companion_volume";
-const MAX_HISTORY = 200;
-
-// ============================================
-// LOGGING
-// ============================================
-function log(msg) {
-  console.log("[App]", msg);
+function log(message) {
+  const timestamp = new Date().toLocaleTimeString();
+  console.log(`[App] ${message}`);
+  
   if (logEl) {
-    const time = new Date().toLocaleTimeString();
-    logEl.innerHTML += `<span style="color:#999">[${time}]</span> ${msg}<br>`;
+    logEl.innerHTML += `<span style="color:#999">[${timestamp}]</span> ${message}<br>`;
     logEl.scrollTop = logEl.scrollHeight;
   }
 }
 
 // ============================================
-// STORAGE FUNCTIONS
+// LOCAL STORAGE FUNCTIONS
 // ============================================
-function saveHistory() {
+function saveConversationHistory() {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(conversationHistory.slice(-MAX_HISTORY)));
-  } catch (e) {}
+    const historyToSave = conversationHistory.slice(-MAX_HISTORY_ITEMS);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(historyToSave));
+  } catch (err) {
+    console.error("Failed to save history:", err);
+  }
 }
 
-function loadHistory() {
+function loadConversationHistory() {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       conversationHistory = JSON.parse(saved);
+      log(`📂 Loaded ${conversationHistory.length} messages from history`);
       return true;
     }
-  } catch (e) {}
+  } catch (err) {
+    console.error("Failed to load history:", err);
+  }
   return false;
 }
 
-function clearHistory() {
-  localStorage.removeItem(STORAGE_KEY);
-  conversationHistory = [];
+function clearConversationStorage() {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+    conversationHistory = [];
+    log("🗑️ Conversation history cleared");
+  } catch (err) {
+    console.error("Failed to clear history:", err);
+  }
 }
 
 function saveAvatarChoice(path) {
-  localStorage.setItem(AVATAR_KEY, path);
+  try {
+    localStorage.setItem(AVATAR_KEY, path);
+  } catch (err) {
+    console.error("Failed to save avatar choice:", err);
+  }
 }
 
 function loadAvatarChoice() {
-  return localStorage.getItem(AVATAR_KEY) || "/assets/vrmavatar1.vrm";
+  try {
+    return localStorage.getItem(AVATAR_KEY) || "/assets/vrmavatar1.vrm";
+  } catch (err) {
+    return "/assets/vrmavatar1.vrm";
+  }
+}
+
+function saveMusicState(playing) {
+  try {
+    localStorage.setItem(MUSIC_KEY, playing ? "on" : "off");
+  } catch (err) {}
+}
+
+function loadMusicState() {
+  try {
+    return localStorage.getItem(MUSIC_KEY) === "on";
+  } catch (err) {
+    return false;
+  }
+}
+
+function saveMusicVolume(volume) {
+  try {
+    localStorage.setItem(VOLUME_KEY, volume.toString());
+  } catch (err) {}
+}
+
+function loadMusicVolume() {
+  try {
+    const saved = localStorage.getItem(VOLUME_KEY);
+    return saved ? parseFloat(saved) : 0.3;
+  } catch (err) {
+    return 0.3;
+  }
 }
 
 // ============================================
 // MUSIC PLAYER
 // ============================================
 function initMusic() {
-  log("🎵 Initializing music...");
+  log("🎵 Initializing music system...");
   
+  // Create audio element
   backgroundMusic = document.createElement("audio");
   backgroundMusic.loop = true;
   backgroundMusic.preload = "auto";
   
-  const savedVolume = localStorage.getItem(VOLUME_KEY);
-  if (savedVolume) musicVolume = parseFloat(savedVolume);
+  // Load saved volume
+  musicVolume = loadMusicVolume();
   backgroundMusic.volume = musicVolume;
   
+  // Try multiple music file paths
   const musicFiles = [
     "/assets/music/ambient.mp3",
     "/assets/music/ambient1.mp3",
     "/assets/music/ambient2.mp3",
     "/assets/music/background.mp3",
-    "/assets/music/lofi.mp3"
+    "/assets/music/lofi.mp3",
+    "/assets/music/music.mp3"
   ];
   
   let currentFileIndex = 0;
   
-  function tryLoadMusic() {
+  function tryNextMusicFile() {
     if (currentFileIndex >= musicFiles.length) {
-      log("🎵 No music files found");
+      log("🎵 No music files found in /assets/music/");
       return;
     }
-    backgroundMusic.src = musicFiles[currentFileIndex];
+    
+    const filePath = musicFiles[currentFileIndex];
+    log(`🎵 Trying: ${filePath}`);
+    backgroundMusic.src = filePath;
     currentFileIndex++;
   }
   
-  backgroundMusic.addEventListener("error", tryLoadMusic);
-  backgroundMusic.addEventListener("canplaythrough", () => log("🎵 Music ready"));
+  backgroundMusic.addEventListener("error", () => {
+    tryNextMusicFile();
+  });
   
-  tryLoadMusic();
+  backgroundMusic.addEventListener("canplaythrough", () => {
+    log("🎵 Music file loaded and ready!");
+  });
   
+  // Start trying to load music
+  tryNextMusicFile();
+  
+  // Update volume slider if exists
   if (musicVolumeSlider) {
     musicVolumeSlider.value = musicVolume * 100;
   }
 }
 
 function playMusic() {
-  if (!backgroundMusic?.src) return;
+  if (!backgroundMusic || !backgroundMusic.src) {
+    log("🎵 No music source available");
+    return;
+  }
   
   backgroundMusic.play()
     .then(() => {
       isMusicPlaying = true;
-      localStorage.setItem(MUSIC_KEY, "on");
-      updateMusicUI();
-      log("🎵 Playing");
+      saveMusicState(true);
+      updateMusicToggleUI();
+      log("🎵 Music playing");
     })
-    .catch(err => log("🎵 Blocked: " + err.message));
+    .catch(err => {
+      log("🎵 Playback blocked: " + err.message);
+      // Will work after user interaction
+    });
 }
 
 function pauseMusic() {
   if (!backgroundMusic) return;
+  
   backgroundMusic.pause();
   isMusicPlaying = false;
-  localStorage.setItem(MUSIC_KEY, "off");
-  updateMusicUI();
+  saveMusicState(false);
+  updateMusicToggleUI();
+  log("🔇 Music paused");
 }
 
 function toggleMusic() {
-  if (isMusicPlaying) pauseMusic();
-  else playMusic();
-}
-
-function updateMusicUI() {
-  if (musicToggle) {
-    musicToggle.classList.toggle("active", isMusicPlaying);
-    const label = musicToggle.querySelector(".mode-label");
-    if (label) label.textContent = isMusicPlaying ? "Music On 🎵" : "Music Off";
-  }
-}
-
-// ============================================
-// ROOM TOGGLE
-// ============================================
-async function toggleRoom() {
-  if (isRoomEnabled) {
-    removeRoom();
-    isRoomEnabled = false;
-    updateRoomUI();
-    log("🏠 Room disabled");
+  if (isMusicPlaying) {
+    pauseMusic();
   } else {
-    try {
-      await loadRoomModel("/assets/room/room.glb");
-      isRoomEnabled = true;
-      updateRoomUI();
-      log("🏠 Room enabled");
-    } catch (err) {
-      log("🏠 Room failed: " + err.message);
-    }
+    playMusic();
   }
 }
 
-function updateRoomUI() {
-  if (roomToggle) {
-    roomToggle.classList.toggle("active", isRoomEnabled);
-    const label = roomToggle.querySelector(".mode-label");
-    if (label) label.textContent = isRoomEnabled ? "Room On 🏠" : "Room Off";
+function setMusicVolume(volume) {
+  musicVolume = Math.max(0, Math.min(1, volume));
+  if (backgroundMusic) {
+    backgroundMusic.volume = musicVolume;
+  }
+  saveMusicVolume(musicVolume);
+}
+
+function updateMusicToggleUI() {
+  if (!musicToggle) return;
+  
+  if (isMusicPlaying) {
+    musicToggle.classList.add("active");
+  } else {
+    musicToggle.classList.remove("active");
+  }
+  
+  const label = musicToggle.querySelector(".mode-label");
+  if (label) {
+    label.textContent = isMusicPlaying ? "Music On 🎵" : "Music Off";
+  }
+}
+
+// Lower music volume during speech
+function lowerMusicForSpeech() {
+  if (backgroundMusic && isMusicPlaying) {
+    backgroundMusic.volume = musicVolume * 0.2;
+  }
+}
+
+// Restore music volume after speech
+function restoreMusicVolume() {
+  if (backgroundMusic && isMusicPlaying) {
+    backgroundMusic.volume = musicVolume;
   }
 }
 
 // ============================================
-// CAPTION
+// CAPTION DISPLAY
 // ============================================
-function showCaption(text) {
-  if (chatCaption) {
-    chatCaption.textContent = text;
-    chatCaption.classList.add("active");
-  }
+function showCaptionText(text) {
+  if (!chatCaption) return;
+  chatCaption.textContent = text;
+  chatCaption.classList.add("active");
 }
 
-function hideCaption() {
-  if (chatCaption) chatCaption.classList.remove("active");
+function hideCaptionText() {
+  if (!chatCaption) return;
+  chatCaption.classList.remove("active");
 }
 
 // ============================================
-// CORRECTION
+// CORRECTION DISPLAY (Practice Mode)
 // ============================================
 function showCorrection(userText, correctedText, explanation, correctness) {
   if (!correctionContent || !correctionDisplay) return;
 
-  const statusClass = correctness === "correct" ? "correction-correct" : 
-                      correctness === "almost" ? "correction-almost" : "correction-wrong";
-  const statusIcon = correctness === "correct" ? "✔️" : 
-                     correctness === "almost" ? "⚠️" : "❌";
+  let statusClass = "";
+  let statusIcon = "";
+  let statusText = "";
+  
+  switch (correctness) {
+    case "correct":
+      statusClass = "correction-correct";
+      statusIcon = "✔️";
+      statusText = "Perfect!";
+      break;
+    case "almost":
+      statusClass = "correction-almost";
+      statusIcon = "⚠️";
+      statusText = "Almost there!";
+      break;
+    default:
+      statusClass = "correction-wrong";
+      statusIcon = "❌";
+      statusText = "Let's improve";
+  }
 
-  correctionContent.innerHTML = `
+  const html = `
     <div class="${statusClass}">
       <div class="correction-display-header">
         <span>${statusIcon}</span>
-        <span>${correctness === "correct" ? "Perfect!" : "Let's improve"}</span>
+        <span>${statusText}</span>
       </div>
       <div class="correction-display-content">
         <div class="correction-display-section">
           <div class="correction-display-label">You said:</div>
-          <div>"${userText}"</div>
+          <div class="correction-display-text">"${escapeHtml(userText)}"</div>
         </div>
         ${correctness !== "correct" ? `
           <div class="correction-display-section">
-            <div class="correction-display-label">Better:</div>
-            <div class="correction-green">"${correctedText}"</div>
+            <div class="correction-display-label">Better way:</div>
+            <div class="correction-display-text correction-green">"${escapeHtml(correctedText)}"</div>
           </div>
-          <div style="margin-top:8px;font-size:12px;color:#666;">${explanation}</div>
-        ` : ""}
+          <div style="margin-top: 8px; font-size: 12px; color: #666;">
+            💡 ${escapeHtml(explanation)}
+          </div>
+        ` : `
+          <div style="text-align: center; color: #4caf50; font-weight: 600; margin-top: 8px;">
+            Great job! Keep it up! 🎉
+          </div>
+        `}
       </div>
     </div>
   `;
+
+  correctionContent.innerHTML = html;
   correctionDisplay.style.display = "block";
 }
 
 function hideCorrection() {
-  if (correctionDisplay) correctionDisplay.style.display = "none";
+  if (correctionDisplay) {
+    correctionDisplay.style.display = "none";
+  }
 }
 
 // ============================================
-// STATUS
+// STATUS DISPLAY
 // ============================================
-function setStatus(message) {
-  if (statusEl) statusEl.textContent = message;
+function setStatus(message, type = "") {
+  if (!statusEl) return;
+
+  const statusMessages = {
+    ready: "Ready to chat! 💭",
+    listening: "Listening... 👂",
+    thinking: "Thinking... 💭",
+    speaking: "Speaking... 💬",
+    error: "Oops! Something went wrong 😅",
+    paused: "Paused 💭",
+    welcome: "Welcome back! 😊",
+    fresh: "Fresh start! 🌟"
+  };
+
+  statusEl.textContent = statusMessages[type] || message;
 }
 
 // ============================================
-// PROMPT
+// UTILITY FUNCTIONS
+// ============================================
+function escapeHtml(text) {
+  const div = document.createElement("div");
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+function cleanMarkdown(text) {
+  if (!text) return "";
+  
+  // Use marked if available
+  if (typeof marked !== "undefined" && marked.parse) {
+    const html = marked.parse(text);
+    // Sanitize with DOMPurify if available
+    const safe = (typeof DOMPurify !== "undefined" && DOMPurify.sanitize) 
+      ? DOMPurify.sanitize(html) 
+      : html;
+    // Extract text content
+    const div = document.createElement("div");
+    div.innerHTML = safe;
+    return (div.textContent || div.innerText || "").replace(/\s+/g, " ").trim();
+  }
+  
+  // Fallback: strip markdown characters
+  return text
+    .replace(/[*_~`#\[\]]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// ============================================
+// PROMPT BUILDER
 // ============================================
 function buildPrompt(userText) {
   if (isPracticeMode) {
-    return `You are a friendly English tutor. Analyze: "${userText}"
-Respond in JSON only: {"correctness":"correct/almost/wrong","corrected":"...","explanation":"...","reply":"..."}`;
+    return `You are a friendly English learning companion (age 16-17, warm and supportive).
+
+TASK: Analyze this sentence for grammar and spelling errors.
+
+Student said: "${userText}"
+
+Respond in this EXACT JSON format (no markdown, no code blocks):
+{
+  "correctness": "correct" OR "almost" OR "wrong",
+  "corrected": "the corrected sentence here",
+  "explanation": "brief explanation of the error (under 20 words)",
+  "reply": "an encouraging response to the student (1-2 sentences)"
+}
+
+Rules:
+- If the sentence is perfect: correctness="correct"
+- If there are minor errors (1-2 small mistakes): correctness="almost"
+- If there are major errors: correctness="wrong"
+- Always be encouraging and supportive
+- Keep explanation brief and clear`;
   }
   
-  const history = conversationHistory.slice(-10).map(m => 
-    `${m.role === "user" ? "Student" : "You"}: ${m.content}`
+  // Casual conversation mode
+  const personality = `You're a friendly 16-17 year old English companion. You're warm, supportive, and genuinely interested in the student.
+
+Your personality:
+- Cheerful and encouraging
+- Natural and conversational (not robotic)
+- Show genuine interest with follow-up questions sometimes
+- Age-appropriate for 13-15 year old students
+- No catchphrases or repetitive patterns
+- Mix short and slightly longer responses naturally`;
+
+  // Build conversation context
+  const recentHistory = conversationHistory.slice(-15).map(msg => 
+    `${msg.role === "user" ? "Student" : "You"}: ${msg.content}`
   ).join("\n");
 
-  return `You're a friendly 16-17yo English companion. Be warm, natural.
-${history ? `Recent:\n${history}\n` : ""}
+  return `${personality}
+
+${recentHistory ? `Recent conversation:\n${recentHistory}\n` : "(This is the start of the conversation)"}
+
 Student: "${userText}"
-Respond in 1-3 sentences.`;
+
+Respond naturally in 1-3 sentences (about 30-60 words). Be warm and engaging!`;
 }
 
 // ============================================
-// VOICE
+// VOICE SELECTION
 // ============================================
-function selectVoice() {
+function selectBestVoice() {
   const voices = window.speechSynthesis.getVoices();
-  if (!voices.length) return null;
+  if (!voices || voices.length === 0) return null;
 
-  const preferred = ["Google US English Female", "Samantha", "Karen", "Victoria"];
-  for (const name of preferred) {
+  // Preferred voices in order
+  const preferredVoices = [
+    "Google US English Female",
+    "Google UK English Female",
+    "Microsoft Zira",
+    "Samantha",
+    "Karen",
+    "Victoria",
+    "Fiona"
+  ];
+
+  // Try to find preferred voice
+  for (const name of preferredVoices) {
     const found = voices.find(v => v.name.includes(name));
     if (found) return found;
   }
-  return voices.find(v => v.lang.startsWith("en")) || voices[0];
+
+  // Look for any female English voice
+  const femaleVoice = voices.find(v => 
+    (v.lang.startsWith("en-US") || v.lang.startsWith("en-GB")) &&
+    /female|woman|girl/i.test(v.name)
+  );
+  if (femaleVoice) return femaleVoice;
+
+  // Any English voice
+  const englishVoice = voices.find(v => v.lang.startsWith("en"));
+  return englishVoice || voices[0];
 }
 
 // ============================================
-// TTS
+// TEXT-TO-SPEECH
 // ============================================
 function speak(text) {
-  if (!text?.trim()) return;
+  if (!text || !text.trim()) return;
 
-  window.speechSynthesis.cancel();
+  // Stop any current speech
+  stopSpeech();
 
-  const utter = new SpeechSynthesisUtterance(text.replace(/[*_~`#\[\]]/g, "").trim());
-  utter.lang = "en-US";
-  utter.volume = 1.0;
-  utter.rate = IS_MOBILE ? 0.88 : 0.95;
-  utter.pitch = IS_MOBILE ? 1.12 : 1.22;
+  // Clean the text
+  const cleanText = cleanMarkdown(text);
+  lastSpokenText = cleanText;
 
-  const voice = selectVoice();
-  if (voice) utter.voice = voice;
+  // Create utterance
+  const utterance = new SpeechSynthesisUtterance(cleanText);
+  utterance.lang = "en-US";
+  utterance.volume = 1.0;
+  
+  // Adjust rate and pitch for device
+  if (IS_MOBILE) {
+    utterance.rate = IS_ANDROID ? 0.85 : 0.88;
+    utterance.pitch = IS_ANDROID ? 1.12 : 1.15;
+  } else {
+    utterance.rate = 0.95;
+    utterance.pitch = 1.2;
+  }
 
-  utter.onstart = () => {
+  // Set voice
+  const voice = selectBestVoice();
+  if (voice) utterance.voice = voice;
+
+  // Event handlers
+  utterance.onstart = () => {
     isSpeaking = true;
     avatarStartTalking();
-    showCaption(text);
-    if (backgroundMusic && isMusicPlaying) backgroundMusic.volume = musicVolume * 0.2;
+    showCaptionText(cleanText);
+    setStatus("Speaking... 💬", "speaking");
+    lowerMusicForSpeech();
   };
 
-  utter.onend = () => {
+  utterance.onend = () => {
     isSpeaking = false;
     avatarStopTalking();
-    hideCaption();
-    if (backgroundMusic && isMusicPlaying) backgroundMusic.volume = musicVolume;
-    if (isContinuousMode) setTimeout(startListeningCycle, IS_MOBILE ? 1200 : 800);
-    else setStatus("Your turn! 💭");
+    hideCaptionText();
+    restoreMusicVolume();
+
+    if (isContinuousMode) {
+      const delay = IS_MOBILE ? 1200 : 800;
+      setTimeout(startNextListeningCycle, delay);
+    } else {
+      setStatus("Your turn! 💭", "ready");
+    }
   };
 
-  utter.onerror = () => {
+  utterance.onerror = (event) => {
+    console.error("Speech error:", event);
     isSpeaking = false;
     avatarStopTalking();
-    hideCaption();
-    if (backgroundMusic) backgroundMusic.volume = musicVolume;
-    if (isContinuousMode) setTimeout(startListeningCycle, 1500);
+    hideCaptionText();
+    restoreMusicVolume();
+    
+    if (isContinuousMode) {
+      setTimeout(startNextListeningCycle, 1500);
+    }
   };
 
-  if (IS_MOBILE) setTimeout(() => window.speechSynthesis.speak(utter), 150);
-  else window.speechSynthesis.speak(utter);
+  // Cancel any existing speech and speak
+  try {
+    window.speechSynthesis.cancel();
+  } catch (e) {}
+
+  // Mobile needs a slight delay
+  if (IS_MOBILE) {
+    setTimeout(() => {
+      window.speechSynthesis.speak(utterance);
+    }, 150);
+  } else {
+    window.speechSynthesis.speak(utterance);
+  }
 }
 
 function stopSpeech() {
-  window.speechSynthesis.cancel();
+  try {
+    window.speechSynthesis.cancel();
+  } catch (e) {}
+  
   isSpeaking = false;
   avatarStopTalking();
-  hideCaption();
+  hideCaptionText();
+  restoreMusicVolume();
 }
 
 // ============================================
 // SPEECH RECOGNITION
 // ============================================
-function startListeningCycle() {
+function startNextListeningCycle() {
   if (!isContinuousMode || isSpeaking) return;
-  setStatus("Listening... 👂");
+
+  setStatus("Listening... 👂", "listening");
   isListening = true;
   speechBuffer = "";
-  startListening(handleSpeech, { continuous: false, lang: "en-IN", interimResults: true });
+  
+  startListening(handleUserSpeech, {
+    continuous: false,
+    lang: "en-IN",
+    interimResults: true
+  });
 }
 
-function handleSpeech(text, isFinal = true) {
-  if (!text?.trim()) {
-    if (isContinuousMode && isFinal) setTimeout(startListeningCycle, 500);
+function handleUserSpeech(text, isFinal = true) {
+  log(`🎤 Heard: "${text}" (final: ${isFinal})`);
+  
+  if (!text || !text.trim()) {
+    if (isContinuousMode && isFinal) {
+      setTimeout(startNextListeningCycle, 500);
+    }
     return;
   }
-  if (!isFinal) { speechBuffer = text; return; }
-  sendToBackend(speechBuffer || text);
+
+  if (!isFinal) {
+    speechBuffer = text;
+    return;
+  }
+
+  // Use buffered text or final text
+  const finalText = speechBuffer || text;
   speechBuffer = "";
+  
+  // Send to backend
+  sendToBackend(finalText);
 }
 
 // ============================================
-// BACKEND
+// BACKEND API
 // ============================================
 async function sendToBackend(text) {
-  if (!text?.trim()) return;
+  if (!text || !text.trim()) return;
 
+  // Add to history
   conversationHistory.push({ role: "user", content: text });
-  saveHistory();
-  setStatus("Thinking... 💭");
+  saveConversationHistory();
+
+  setStatus("Thinking... 💭", "thinking");
 
   try {
-    const res = await fetch(API_URL, {
+    const response = await fetch(API_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -414,43 +676,87 @@ async function sendToBackend(text) {
       }),
     });
 
-    if (!res.ok) throw new Error("API error");
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
 
-    const data = await res.json();
-    const reply = data.reply || "I'm here for you!";
+    const data = await response.json();
+    const reply = data.reply || "I'm here to help! Could you say that again?";
 
     if (isPracticeMode) {
-      try {
-        const parsed = JSON.parse(reply.replace(/```json\n?|\n?```/g, "").trim());
-        conversationHistory.push({ role: "assistant", content: parsed.reply });
-        saveHistory();
-        showCorrection(text, parsed.corrected, parsed.explanation, parsed.correctness);
-        speak(parsed.reply);
-      } catch { speak(reply); }
+      handlePracticeModeResponse(text, reply);
     } else {
-      conversationHistory.push({ role: "assistant", content: reply });
-      saveHistory();
-      speak(reply);
+      handleCasualModeResponse(reply);
     }
   } catch (err) {
-    log("❌ Error: " + err.message);
-    setStatus("Oops! 😅");
-    speak("Sorry, connection issue. Try again?");
+    console.error("Backend error:", err);
+    log("❌ Backend error: " + err.message);
+    setStatus("Oops! 😅", "error");
+    speak("Sorry, I lost connection for a moment. Can you try again?");
   }
 }
 
-// ============================================
-// AVATAR SWITCH
-// ============================================
-async function switchAvatar(path) {
-  log("🔄 Switching: " + path);
-  currentAvatarPath = path;
-  saveAvatarChoice(path);
+function handlePracticeModeResponse(userText, reply) {
   try {
-    await loadVRMAvatar(path);
-    log("✅ Avatar loaded");
+    // Clean JSON from markdown code blocks
+    const cleanedReply = reply.replace(/```json\n?|\n?```/g, "").trim();
+    const parsed = JSON.parse(cleanedReply);
+
+    // Add to history
+    conversationHistory.push({ role: "assistant", content: parsed.reply });
+    saveConversationHistory();
+
+    // Show correction
+    showCorrection(
+      userText, 
+      parsed.corrected || userText, 
+      parsed.explanation || "", 
+      parsed.correctness || "wrong"
+    );
+
+    // Speak the reply
+    speak(parsed.reply);
+  } catch (parseError) {
+    console.error("Failed to parse practice mode response:", parseError);
+    // Fallback: just speak the raw reply
+    conversationHistory.push({ role: "assistant", content: reply });
+    saveConversationHistory();
+    speak(cleanMarkdown(reply));
+  }
+}
+
+function handleCasualModeResponse(reply) {
+  conversationHistory.push({ role: "assistant", content: reply });
+  saveConversationHistory();
+  speak(cleanMarkdown(reply));
+}
+
+// ============================================
+// AVATAR SWITCHING
+// ============================================
+async function switchAvatar(avatarPath) {
+  log(`🔄 Switching avatar to: ${avatarPath}`);
+  currentAvatarPath = avatarPath;
+  saveAvatarChoice(avatarPath);
+  
+  try {
+    await loadVRMAvatar(avatarPath);
+    log("✅ Avatar loaded successfully!");
   } catch (err) {
-    log("❌ Failed: " + err.message);
+    console.error("Failed to load avatar:", err);
+    log("❌ Avatar load failed: " + err.message);
+    
+    // Try default avatar as fallback
+    if (avatarPath !== "/assets/vrmavatar1.vrm") {
+      log("🔄 Trying default avatar...");
+      try {
+        await loadVRMAvatar("/assets/vrmavatar1.vrm");
+        currentAvatarPath = "/assets/vrmavatar1.vrm";
+        saveAvatarChoice(currentAvatarPath);
+      } catch (fallbackErr) {
+        log("❌ Default avatar also failed");
+      }
+    }
   }
 }
 
@@ -458,100 +764,143 @@ async function switchAvatar(path) {
 // EVENT LISTENERS
 // ============================================
 
-// Menu
-menuToggle?.addEventListener("click", () => {
-  menuPanel?.classList.add("active");
-  menuOverlay?.classList.add("active");
-});
+// Menu toggle
+if (menuToggle) {
+  menuToggle.addEventListener("click", () => {
+    menuPanel?.classList.add("active");
+    menuOverlay?.classList.add("active");
+  });
+}
 
-menuClose?.addEventListener("click", () => {
-  menuPanel?.classList.remove("active");
-  menuOverlay?.classList.remove("active");
-});
+if (menuClose) {
+  menuClose.addEventListener("click", () => {
+    menuPanel?.classList.remove("active");
+    menuOverlay?.classList.remove("active");
+  });
+}
 
-menuOverlay?.addEventListener("click", () => {
-  menuPanel?.classList.remove("active");
-  menuOverlay?.classList.remove("active");
-});
+if (menuOverlay) {
+  menuOverlay.addEventListener("click", () => {
+    menuPanel?.classList.remove("active");
+    menuOverlay?.classList.remove("active");
+  });
+}
 
-// Practice mode
-modeToggle?.addEventListener("click", () => {
-  isPracticeMode = !isPracticeMode;
-  modeToggle.classList.toggle("active", isPracticeMode);
-  const label = modeToggle.querySelector(".mode-label");
-  if (label) label.textContent = isPracticeMode ? "Practice Mode" : "Casual Chat";
-  hideCorrection();
-});
+// Practice mode toggle
+if (modeToggle) {
+  modeToggle.addEventListener("click", () => {
+    isPracticeMode = !isPracticeMode;
+    modeToggle.classList.toggle("active", isPracticeMode);
 
-// Music
-musicToggle?.addEventListener("click", (e) => {
-  e.preventDefault();
-  toggleMusic();
-});
+    const label = modeToggle.querySelector(".mode-label");
+    if (label) {
+      label.textContent = isPracticeMode ? "Practice Mode" : "Casual Chat";
+    }
 
-musicVolumeSlider?.addEventListener("input", (e) => {
-  musicVolume = e.target.value / 100;
-  if (backgroundMusic) backgroundMusic.volume = musicVolume;
-  localStorage.setItem(VOLUME_KEY, musicVolume.toString());
-});
+    hideCorrection();
+    log(isPracticeMode ? "📝 Switched to Practice Mode" : "💬 Switched to Casual Chat");
+  });
+}
 
-// Room
-roomToggle?.addEventListener("click", (e) => {
-  e.preventDefault();
-  toggleRoom();
-});
+// Music toggle
+if (musicToggle) {
+  musicToggle.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    toggleMusic();
+  });
+}
 
-// Mic
-micBtn?.addEventListener("click", () => {
-  if (isContinuousMode) {
-    isContinuousMode = false;
-    stopListening();
+// Music volume slider
+if (musicVolumeSlider) {
+  musicVolumeSlider.addEventListener("input", (e) => {
+    setMusicVolume(e.target.value / 100);
+  });
+}
+
+// Microphone button
+if (micBtn) {
+  micBtn.addEventListener("click", () => {
+    if (isContinuousMode) {
+      // Stop listening
+      isContinuousMode = false;
+      stopListening();
+      stopSpeech();
+      isListening = false;
+
+      micBtn.classList.remove("active");
+      micBtn.textContent = "🎤";
+      setStatus("Paused 💭", "paused");
+      log("⏸️ Conversation paused");
+    } else {
+      // Start listening
+      isContinuousMode = true;
+      micBtn.classList.add("active");
+      micBtn.textContent = "⏸️";
+      setStatus("Listening... 👂", "listening");
+      log("▶️ Conversation started");
+      startNextListeningCycle();
+    }
+  });
+}
+
+// Clear conversation button
+if (clearBtn) {
+  clearBtn.addEventListener("click", () => {
+    if (!confirm("Start a fresh conversation? This will clear your chat history.")) {
+      return;
+    }
+
+    clearConversationStorage();
     stopSpeech();
-    isListening = false;
-    micBtn.classList.remove("active");
-    micBtn.textContent = "🎤";
-    setStatus("Paused 💭");
-  } else {
-    isContinuousMode = true;
-    micBtn.classList.add("active");
-    micBtn.textContent = "⏸️";
-    setStatus("Listening... 👂");
-    startListeningCycle();
-  }
-});
+    hideCaptionText();
+    hideCorrection();
 
-// Clear
-clearBtn?.addEventListener("click", () => {
-  if (!confirm("Start fresh?")) return;
-  clearHistory();
-  stopSpeech();
-  hideCaption();
-  hideCorrection();
-  setStatus("Fresh start! 🌟");
-  menuPanel?.classList.remove("active");
-  menuOverlay?.classList.remove("active");
-});
+    setStatus("Fresh start! 🌟", "fresh");
+    log("🔄 Started fresh conversation");
 
-// Demo
-demoLessonBtn?.addEventListener("click", () => {
-  const challenges = [
-    "Tell me about something that made you smile today!",
-    "What's your favorite hobby?",
-    "Describe your perfect weekend!",
-    "What anime are you watching lately?",
-  ];
-  speak(challenges[Math.floor(Math.random() * challenges.length)]);
-  menuPanel?.classList.remove("active");
-  menuOverlay?.classList.remove("active");
-});
+    // Close menu
+    menuPanel?.classList.remove("active");
+    menuOverlay?.classList.remove("active");
+  });
+}
+
+// Demo lesson / Daily challenge button
+if (demoLessonBtn) {
+  demoLessonBtn.addEventListener("click", () => {
+    const challenges = [
+      "Tell me about something that made you smile today!",
+      "What's your favorite hobby and why do you enjoy it?",
+      "If you could learn any skill instantly, what would it be?",
+      "Tell me about a friend who's important to you.",
+      "What's your favorite movie or TV show right now?",
+      "Describe your perfect weekend!",
+      "What's something new you learned recently?",
+      "If you could travel anywhere, where would you go?",
+    ];
+
+    const randomChallenge = challenges[Math.floor(Math.random() * challenges.length)];
+    log(`✨ Daily Challenge: "${randomChallenge}"`);
+    speak(randomChallenge);
+
+    // Close menu
+    menuPanel?.classList.remove("active");
+    menuOverlay?.classList.remove("active");
+  });
+}
 
 // Avatar selection
 avatarOptions.forEach(btn => {
   btn.addEventListener("click", () => {
+    // Update UI
     avatarOptions.forEach(b => b.classList.remove("active"));
     btn.classList.add("active");
-    const path = btn.dataset.avatar;
-    if (path) switchAvatar(path);
+    
+    // Load new avatar
+    const avatarPath = btn.dataset.avatar;
+    if (avatarPath && avatarPath !== currentAvatarPath) {
+      switchAvatar(avatarPath);
+    }
   });
 });
 
@@ -559,87 +908,119 @@ avatarOptions.forEach(btn => {
 // INITIALIZATION
 // ============================================
 async function initialize() {
-  log("🚀 Starting...");
+  log("🚀 Initializing application...");
 
+  // Load saved avatar choice
   currentAvatarPath = loadAvatarChoice();
+  log(`📦 Saved avatar: ${currentAvatarPath}`);
 
-  // Init 3D scene
+  // Initialize 3D scene
   const sceneReady = init3DScene("canvas-container");
   if (!sceneReady) {
-    log("❌ Scene failed");
+    log("❌ Failed to initialize 3D scene!");
     return;
   }
 
-  // LOAD ROOM FIRST (default environment)
+  // Try to load room first (default environment)
   try {
-    log("🏠 Loading room...");
+    log("🏠 Loading room environment...");
     await loadRoomModel("/assets/room/room.glb");
-    isRoomEnabled = true;
-    log("🏠 Room loaded!");
+    log("🏠 Room loaded successfully!");
   } catch (err) {
-    log("🏠 Room not found, using fallback");
-    isRoomEnabled = false;
+    log("🏠 Room not found - using fallback sky/ground");
+    useFallbackEnvironment();
   }
-  updateRoomUI();
 
-  // THEN LOAD AVATAR
+  // Load VRM avatar
   try {
+    log(`👤 Loading avatar: ${currentAvatarPath}`);
     await loadVRMAvatar(currentAvatarPath);
-    log("✅ Avatar loaded");
-  } catch {
-    try {
-      await loadVRMAvatar("/assets/vrmavatar1.vrm");
-    } catch {
-      log("❌ Avatar failed");
+    log("👤 Avatar loaded successfully!");
+  } catch (err) {
+    log(`❌ Failed to load avatar: ${err.message}`);
+    
+    // Try default avatar
+    if (currentAvatarPath !== "/assets/vrmavatar1.vrm") {
+      try {
+        log("👤 Trying default avatar...");
+        await loadVRMAvatar("/assets/vrmavatar1.vrm");
+        currentAvatarPath = "/assets/vrmavatar1.vrm";
+      } catch (fallbackErr) {
+        log("❌ Default avatar also failed!");
+      }
     }
   }
 
-  // Mark active avatar
+  // Mark active avatar in UI
   avatarOptions.forEach(btn => {
-    if (btn.dataset.avatar === currentAvatarPath) btn.classList.add("active");
+    if (btn.dataset.avatar === currentAvatarPath) {
+      btn.classList.add("active");
+    } else {
+      btn.classList.remove("active");
+    }
   });
 
-  // Music
+  // Initialize music
   initMusic();
-  updateMusicUI();
+  updateMusicToggleUI();
 
-  // History
-  if (loadHistory()) setStatus("Welcome back! 😊");
-  else setStatus("Ready to chat! 💭");
-
-  // Voices
-  if (window.speechSynthesis) {
-    window.speechSynthesis.onvoiceschanged = () => {
-      log("🔊 Voices: " + window.speechSynthesis.getVoices().length);
-    };
+  // Load conversation history
+  const hasHistory = loadConversationHistory();
+  if (hasHistory) {
+    setStatus("Welcome back! 😊", "welcome");
+  } else {
+    setStatus("Ready to chat! 💭", "ready");
   }
 
-  // Mic permission
+  // Load speech synthesis voices
+  if (window.speechSynthesis) {
+    const loadVoices = () => {
+      const voices = window.speechSynthesis.getVoices();
+      log(`🔊 Loaded ${voices.length} voices`);
+    };
+
+    if (window.speechSynthesis.getVoices().length > 0) {
+      loadVoices();
+    } else {
+      window.speechSynthesis.onvoiceschanged = loadVoices;
+    }
+  }
+
+  // Request microphone permission on mobile
   if (IS_MOBILE && navigator.mediaDevices?.getUserMedia) {
     try {
       await navigator.mediaDevices.getUserMedia({ audio: true });
-      log("✅ Mic allowed");
-    } catch {
-      alert("Please allow microphone access.");
+      log("✅ Microphone permission granted");
+    } catch (err) {
+      log("❌ Microphone permission denied");
+      alert("Please allow microphone access to use voice features.");
     }
   }
 
-  log("✅ Ready!");
+  log("✅ Application ready!");
 }
 
-// Start
+// ============================================
+// START APPLICATION
+// ============================================
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", initialize);
 } else {
   initialize();
 }
 
-// Cleanup
+// ============================================
+// CLEANUP HANDLERS
+// ============================================
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden && isSpeaking) stopSpeech();
+  if (document.hidden && isSpeaking) {
+    stopSpeech();
+  }
 });
 
 window.addEventListener("beforeunload", () => {
   stopSpeech();
-  if (isListening) stopListening();
+  if (isListening) {
+    stopListening();
+  }
 });
