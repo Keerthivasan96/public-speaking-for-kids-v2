@@ -59,33 +59,36 @@ const CONFIG = {
   avatarHeight: 1.45,           // Slightly smaller avatar
   
   // ===== CAMERA (FIXED TO ROOM, NOT AVATAR) =====
-  // Camera looks at a point in the room, avatar is placed there
-  cameraX: 0,                   // Camera X position
-  cameraY: 1.4,                 // Camera height (eye level)
-  cameraZ: 2.5,                 // Camera distance from scene center
+  cameraX: 0,
+  cameraY: 1.4,
+  cameraZ: 2.5,                 // Your setting
   
-  // Where camera looks (scene center point)
   lookAtX: 0,
-  lookAtY: 0.9,                 // Look at mid-body height
+  lookAtY: 0.9,
   lookAtZ: 0,
   
-  cameraFOV: 50,                // Wider FOV to see more room
+  cameraFOV: 50,
   
   // ===== AVATAR POSITION IN ROOM =====
-  avatarX: 0,                   // Center
-  avatarY: 0,                   // On floor
-  avatarZ: 0.5,                 // Slightly forward from center
+  avatarX: 0,
+  avatarY: 0,
+  avatarZ: 0.5,
   
   // ===== ROOM =====
-  roomScale: 0.5,               // Adjust based on room model
+  roomScale: 0.5,
   roomX: 0,
   roomY: 0,
-  roomZ: -2,                    // Push room back
+  roomZ: -2,
   
-  // ===== FALLBACK COLORS =====
-  skyTopColor: 0xC9B8E8,        // Soft purple (like Replika)
-  skyBottomColor: 0xE8D4E8,     // Soft pink
-  groundColor: 0xD8C8D8,
+  // ===== ELEGANT COLOR THEME =====
+  // Soft lavender/purple gradient sky
+  skyTopColor: 0x9B8AC4,        // Deeper lavender at top
+  skyMidColor: 0xC4B8D8,        // Mid lavender
+  skyBottomColor: 0xE8E0F0,     // Light lavender/white at horizon
+  
+  // Floor - soft warm gray that complements purple
+  floorCenterColor: 0xE8E4EC,   // Light warm gray (center, under avatar)
+  floorEdgeColor: 0xD0C8D8,     // Slightly darker lavender-gray at edges
   
   // ===== ANIMATIONS =====
   breathingSpeed: 0.5,
@@ -183,14 +186,13 @@ export function init3DScene(containerId = "canvas-container") {
 // CREATE FALLBACK ENVIRONMENT
 // ============================================
 function createFallbackEnvironment() {
-  // Gradient sky sphere (Replika-style soft colors)
-  const skyGeo = new THREE.SphereGeometry(50, 32, 32);
+  // Beautiful gradient sky (3-color gradient for elegance)
+  const skyGeo = new THREE.SphereGeometry(50, 64, 64);
   const skyMat = new THREE.ShaderMaterial({
     uniforms: {
       topColor: { value: new THREE.Color(CONFIG.skyTopColor) },
+      midColor: { value: new THREE.Color(CONFIG.skyMidColor) },
       bottomColor: { value: new THREE.Color(CONFIG.skyBottomColor) },
-      offset: { value: 5 },
-      exponent: { value: 0.5 }
     },
     vertexShader: `
       varying vec3 vWorldPosition;
@@ -202,13 +204,20 @@ function createFallbackEnvironment() {
     `,
     fragmentShader: `
       uniform vec3 topColor;
+      uniform vec3 midColor;
       uniform vec3 bottomColor;
-      uniform float offset;
-      uniform float exponent;
       varying vec3 vWorldPosition;
       void main() {
-        float h = normalize(vWorldPosition + offset).y;
-        gl_FragColor = vec4(mix(bottomColor, topColor, max(pow(max(h, 0.0), exponent), 0.0)), 1.0);
+        float h = normalize(vWorldPosition).y;
+        vec3 color;
+        if (h > 0.0) {
+          // Upper half: mid to top
+          color = mix(midColor, topColor, smoothstep(0.0, 0.8, h));
+        } else {
+          // Lower half: bottom to mid (horizon area)
+          color = mix(bottomColor, midColor, smoothstep(-0.3, 0.0, h));
+        }
+        gl_FragColor = vec4(color, 1.0);
       }
     `,
     side: THREE.BackSide,
@@ -217,15 +226,16 @@ function createFallbackEnvironment() {
   
   fallbackSky = new THREE.Mesh(skyGeo, skyMat);
   fallbackSky.name = "fallbackSky";
-  fallbackSky.visible = false;
+  fallbackSky.visible = true;  // VISIBLE BY DEFAULT
   scene.add(fallbackSky);
 
-  // Ground plane with soft gradient
-  const groundGeo = new THREE.PlaneGeometry(40, 40, 1, 1);
+  // Elegant floor with radial gradient (lighter in center, darker at edges)
+  const groundGeo = new THREE.PlaneGeometry(60, 60, 1, 1);
   const groundMat = new THREE.ShaderMaterial({
     uniforms: {
-      centerColor: { value: new THREE.Color(0xE8E0E8) },
-      edgeColor: { value: new THREE.Color(0xC8C0D0) },
+      centerColor: { value: new THREE.Color(CONFIG.floorCenterColor) },
+      edgeColor: { value: new THREE.Color(CONFIG.floorEdgeColor) },
+      avatarPos: { value: new THREE.Vector2(0.5, 0.5) },
     },
     vertexShader: `
       varying vec2 vUv;
@@ -237,10 +247,19 @@ function createFallbackEnvironment() {
     fragmentShader: `
       uniform vec3 centerColor;
       uniform vec3 edgeColor;
+      uniform vec2 avatarPos;
       varying vec2 vUv;
       void main() {
-        float dist = distance(vUv, vec2(0.5, 0.5));
-        vec3 color = mix(centerColor, edgeColor, smoothstep(0.0, 0.7, dist));
+        // Radial gradient from avatar position
+        float dist = distance(vUv, avatarPos);
+        // Smooth falloff
+        float gradient = smoothstep(0.0, 0.5, dist);
+        vec3 color = mix(centerColor, edgeColor, gradient);
+        
+        // Add subtle vignette at far edges
+        float vignette = smoothstep(0.7, 1.0, dist) * 0.15;
+        color = mix(color, edgeColor * 0.9, vignette);
+        
         gl_FragColor = vec4(color, 1.0);
       }
     `
@@ -248,13 +267,13 @@ function createFallbackEnvironment() {
   
   fallbackGround = new THREE.Mesh(groundGeo, groundMat);
   fallbackGround.rotation.x = -Math.PI / 2;
-  fallbackGround.position.y = 0;
+  fallbackGround.position.y = -0.01;  // Slightly below 0 to avoid z-fighting
   fallbackGround.receiveShadow = true;
   fallbackGround.name = "fallbackGround";
-  fallbackGround.visible = false;
+  fallbackGround.visible = true;  // VISIBLE BY DEFAULT
   scene.add(fallbackGround);
   
-  console.log("[3D] ✅ Fallback environment created");
+  console.log("[3D] ✅ Elegant environment created");
 }
 
 // ============================================
@@ -465,9 +484,10 @@ export async function loadRoomModel(glbPath) {
         currentRoom = room;
         hasRoomLoaded = true;
 
-        // Hide fallback environment
-        if (fallbackSky) fallbackSky.visible = false;
-        if (fallbackGround) fallbackGround.visible = false;
+        // Keep sky visible for nice background colors
+        // Only hide ground if room has its own floor
+        // if (fallbackSky) fallbackSky.visible = false;
+        // if (fallbackGround) fallbackGround.visible = false;
 
         if (loadingEl) loadingEl.classList.remove("active");
 
@@ -902,12 +922,75 @@ function onResize() {
 }
 
 // ============================================
-// CHANGE SKY COLORS
+// CHANGE COLORS (for easy customization)
 // ============================================
-export function setSkyColors(topColor, bottomColor) {
+export function setSkyColors(topColor, midColor, bottomColor) {
   if (fallbackSky && fallbackSky.material.uniforms) {
-    fallbackSky.material.uniforms.topColor.value.setHex(topColor);
-    fallbackSky.material.uniforms.bottomColor.value.setHex(bottomColor);
+    if (topColor) fallbackSky.material.uniforms.topColor.value.setHex(topColor);
+    if (midColor) fallbackSky.material.uniforms.midColor.value.setHex(midColor);
+    if (bottomColor) fallbackSky.material.uniforms.bottomColor.value.setHex(bottomColor);
+  }
+}
+
+export function setFloorColors(centerColor, edgeColor) {
+  if (fallbackGround && fallbackGround.material.uniforms) {
+    if (centerColor) fallbackGround.material.uniforms.centerColor.value.setHex(centerColor);
+    if (edgeColor) fallbackGround.material.uniforms.edgeColor.value.setHex(edgeColor);
+  }
+}
+
+// Preset color themes
+export function setColorTheme(theme) {
+  const themes = {
+    lavender: {
+      skyTop: 0x9B8AC4,
+      skyMid: 0xC4B8D8,
+      skyBottom: 0xE8E0F0,
+      floorCenter: 0xE8E4EC,
+      floorEdge: 0xD0C8D8
+    },
+    sunset: {
+      skyTop: 0x4A3F6B,
+      skyMid: 0xC97B84,
+      skyBottom: 0xF2D7D9,
+      floorCenter: 0xF5E6E8,
+      floorEdge: 0xE8D0D4
+    },
+    ocean: {
+      skyTop: 0x1E3A5F,
+      skyMid: 0x6B9AC4,
+      skyBottom: 0xD4E6F1,
+      floorCenter: 0xE8F4F8,
+      floorEdge: 0xC8DCE8
+    },
+    mint: {
+      skyTop: 0x4A7C6F,
+      skyMid: 0x8FBCB0,
+      skyBottom: 0xD8EDE8,
+      floorCenter: 0xE8F2EF,
+      floorEdge: 0xC8DCD8
+    },
+    warm: {
+      skyTop: 0x8B7355,
+      skyMid: 0xC4A882,
+      skyBottom: 0xF0E6D8,
+      floorCenter: 0xF5EDE0,
+      floorEdge: 0xE0D4C4
+    },
+    pink: {
+      skyTop: 0xB76E99,
+      skyMid: 0xDBA8C4,
+      skyBottom: 0xF8E8F0,
+      floorCenter: 0xFAF0F5,
+      floorEdge: 0xECD8E4
+    }
+  };
+  
+  const t = themes[theme];
+  if (t) {
+    setSkyColors(t.skyTop, t.skyMid, t.skyBottom);
+    setFloorColors(t.floorCenter, t.floorEdge);
+    console.log(`[3D] ✅ Theme set: ${theme}`);
   }
 }
 
