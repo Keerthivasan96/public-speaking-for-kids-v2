@@ -1,5 +1,5 @@
 // ============================================
-// app.js - WITH MUSIC SUPPORT
+// app.js - FIXED MUSIC TOGGLE + ROOM SUPPORT
 // LOCATION: frontend/src/app.js
 // ============================================
 
@@ -10,6 +10,8 @@ import {
   avatarStartTalking, 
   avatarStopTalking,
   loadRoomModel,
+  removeRoom,
+  hasRoom,
   addProp,
   setSkyColors
 } from "./threejs-avatar-3d.js";
@@ -38,6 +40,7 @@ const demoLessonBtn = document.getElementById("demoLessonBtn");
 const modeToggle = document.getElementById("modeToggle");
 const musicToggle = document.getElementById("musicToggle");
 const musicVolumeSlider = document.getElementById("musicVolume");
+const roomToggle = document.getElementById("roomToggle");
 
 const statusEl = document.getElementById("status");
 const logEl = document.getElementById("log");
@@ -65,6 +68,9 @@ let currentAvatarPath = "/assets/vrmavatar1.vrm";
 let backgroundMusic = null;
 let isMusicPlaying = false;
 let musicVolume = 0.3;
+
+// Room
+let isRoomEnabled = false;
 
 // ============================================
 // STORAGE KEYS
@@ -149,70 +155,79 @@ function loadMusicVolume() {
 }
 
 // ============================================
-// MUSIC PLAYER
+// MUSIC PLAYER - FIXED
 // ============================================
 function initMusic() {
+  log("🎵 Initializing music...");
+  
   // Create audio element
-  backgroundMusic = new Audio();
+  backgroundMusic = document.createElement("audio");
   backgroundMusic.loop = true;
+  backgroundMusic.preload = "auto";
+  
+  // Load saved volume
+  musicVolume = loadMusicVolume();
   backgroundMusic.volume = musicVolume;
   
-  // Try to load music file
-  // Will use first available: ambient1.mp3, background.mp3, or music.mp3
+  // Try multiple music file paths
   const musicFiles = [
     "/assets/music/ambient.mp3",
+    "/assets/music/ambient1.mp3",
+    "/assets/music/ambient2.mp3",
     "/assets/music/background.mp3",
     "/assets/music/lofi.mp3"
   ];
   
-  backgroundMusic.src = musicFiles[0];
+  let currentFileIndex = 0;
   
-  backgroundMusic.onerror = () => {
-    console.log("[Music] Primary music file not found, trying next...");
-    // Try next file
-    const currentIndex = musicFiles.indexOf(backgroundMusic.src.replace(window.location.origin, ""));
-    if (currentIndex < musicFiles.length - 1) {
-      backgroundMusic.src = musicFiles[currentIndex + 1];
-    } else {
-      console.log("[Music] No music files found");
+  function tryLoadMusic() {
+    if (currentFileIndex >= musicFiles.length) {
+      log("🎵 No music files found");
+      return;
     }
-  };
-
-  backgroundMusic.oncanplaythrough = () => {
-    console.log("[Music] ✅ Music loaded");
-  };
-
-  // Load saved state
-  musicVolume = loadMusicVolume();
-  backgroundMusic.volume = musicVolume;
+    
+    const filePath = musicFiles[currentFileIndex];
+    log(`🎵 Trying: ${filePath}`);
+    backgroundMusic.src = filePath;
+    currentFileIndex++;
+  }
   
+  backgroundMusic.addEventListener("error", () => {
+    log("🎵 File not found, trying next...");
+    tryLoadMusic();
+  });
+  
+  backgroundMusic.addEventListener("canplaythrough", () => {
+    log("🎵 Music file ready!");
+  });
+  
+  // Start loading
+  tryLoadMusic();
+  
+  // Update volume slider
   if (musicVolumeSlider) {
     musicVolumeSlider.value = musicVolume * 100;
-  }
-
-  // Auto-play if was playing before (needs user interaction first)
-  if (loadMusicState()) {
-    // Will play after first user interaction
-    document.addEventListener("click", () => {
-      if (loadMusicState() && !isMusicPlaying) {
-        playMusic();
-      }
-    }, { once: true });
   }
 }
 
 function playMusic() {
-  if (!backgroundMusic) return;
+  if (!backgroundMusic || !backgroundMusic.src) {
+    log("🎵 No music loaded");
+    return;
+  }
+  
+  log("🎵 Attempting to play...");
   
   backgroundMusic.play()
     .then(() => {
       isMusicPlaying = true;
       saveMusicState(true);
       updateMusicToggleUI();
-      log("🎵 Music playing");
+      log("🎵 Playing!");
     })
     .catch(err => {
-      console.log("[Music] Play failed:", err);
+      log("🎵 Play blocked: " + err.message);
+      // Browser blocked autoplay - will work after user interaction
     });
 }
 
@@ -227,6 +242,8 @@ function pauseMusic() {
 }
 
 function toggleMusic() {
+  log("🎵 Toggle clicked. Currently: " + (isMusicPlaying ? "playing" : "paused"));
+  
   if (isMusicPlaying) {
     pauseMusic();
   } else {
@@ -244,10 +261,55 @@ function setMusicVolume(vol) {
 
 function updateMusicToggleUI() {
   if (musicToggle) {
-    musicToggle.classList.toggle("active", isMusicPlaying);
+    if (isMusicPlaying) {
+      musicToggle.classList.add("active");
+    } else {
+      musicToggle.classList.remove("active");
+    }
+    
     const label = musicToggle.querySelector(".mode-label");
     if (label) {
-      label.textContent = isMusicPlaying ? "Music On" : "Music Off";
+      label.textContent = isMusicPlaying ? "Music On 🎵" : "Music Off";
+    }
+  }
+}
+
+// ============================================
+// ROOM TOGGLE
+// ============================================
+async function toggleRoom() {
+  if (isRoomEnabled) {
+    // Remove room
+    removeRoom();
+    isRoomEnabled = false;
+    updateRoomToggleUI();
+    log("🏠 Room removed");
+  } else {
+    // Load room
+    try {
+      log("🏠 Loading room...");
+      await loadRoomModel("/assets/room/room.glb");
+      isRoomEnabled = true;
+      updateRoomToggleUI();
+      log("🏠 Room loaded!");
+    } catch (err) {
+      log("🏠 Room failed: " + err.message);
+      alert("Room file not found!\n\nPlease add 'room.glb' to:\nfrontend/public/assets/room/room.glb");
+    }
+  }
+}
+
+function updateRoomToggleUI() {
+  if (roomToggle) {
+    if (isRoomEnabled) {
+      roomToggle.classList.add("active");
+    } else {
+      roomToggle.classList.remove("active");
+    }
+    
+    const label = roomToggle.querySelector(".mode-label");
+    if (label) {
+      label.textContent = isRoomEnabled ? "Room On 🏠" : "Room Off";
     }
   }
 }
@@ -477,7 +539,7 @@ function speak(text) {
     
     // Lower music volume while speaking
     if (backgroundMusic && isMusicPlaying) {
-      backgroundMusic.volume = musicVolume * 0.3;
+      backgroundMusic.volume = musicVolume * 0.2;
     }
   };
 
@@ -697,15 +759,28 @@ if (modeToggle) {
   });
 }
 
-// Music toggle
+// Music toggle - FIXED with proper event handling
 if (musicToggle) {
-  musicToggle.addEventListener("click", toggleMusic);
+  musicToggle.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    toggleMusic();
+  });
 }
 
 // Music volume
 if (musicVolumeSlider) {
   musicVolumeSlider.addEventListener("input", (e) => {
     setMusicVolume(e.target.value / 100);
+  });
+}
+
+// Room toggle
+if (roomToggle) {
+  roomToggle.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    toggleRoom();
   });
 }
 
@@ -820,6 +895,7 @@ async function initialize() {
   // Init music
   initMusic();
   updateMusicToggleUI();
+  updateRoomToggleUI();
 
   // Load history
   const hasHistory = loadConversationHistory();
