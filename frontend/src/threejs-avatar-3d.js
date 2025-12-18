@@ -1,7 +1,6 @@
 // ============================================
-// threejs-avatar-3d.js - COMPLETE VERSION
-// Room as default environment, avatar properly positioned
-// Full animations, lip sync, blinking, gestures
+// threejs-avatar-3d.js - REPLIKA-STYLE CAMERA
+// Camera frames the ROOM, avatar is placed inside
 // ============================================
 
 import * as THREE from "three";
@@ -19,11 +18,7 @@ let clock = new THREE.Clock();
 let container = null;
 let rafId = null;
 
-// Anchor system (Replika-style)
-let avatarAnchor = null;
-let roomAnchor = null;
-
-// Environment
+// Scene objects
 let currentRoom = null;
 let fallbackGround = null;
 let fallbackSky = null;
@@ -57,64 +52,60 @@ let baseRotations = {
 };
 
 // ============================================
-// CONFIGURATION
+// CONFIGURATION - REPLIKA STYLE
 // ============================================
 const CONFIG = {
-  // Avatar settings
-  avatarHeight: 1.55,
+  // ===== AVATAR =====
+  avatarHeight: 1.45,           // Slightly smaller avatar
   
-  // Camera - positioned to see avatar with room as background
-  cameraDistance: 2.2,
-  cameraHeight: 1.15,
-  cameraLookAtY: 1.35,
-  cameraFOV: 40,
+  // ===== CAMERA (FIXED TO ROOM, NOT AVATAR) =====
+  // Camera looks at a point in the room, avatar is placed there
+  cameraX: 0,                   // Camera X position
+  cameraY: 1.4,                 // Camera height (eye level)
+  cameraZ: 4.5,                 // Camera distance from scene center
   
-  // Avatar position - in FRONT of room furniture
-  avatarX: 0,
-  avatarY: 0,
-  avatarZ: -0.15,
+  // Where camera looks (scene center point)
+  lookAtX: 0,
+  lookAtY: 0.9,                 // Look at mid-body height
+  lookAtZ: 0,
   
-  // Room settings
-  roomScale: 0.38,
-  roomZ: -4.8,
+  cameraFOV: 50,                // Wider FOV to see more room
   
-  // Fallback sky colors
-  skyTopColor: 0x87CEEB,
-  skyBottomColor: 0xE6B3CC,
-  groundColor: 0x8B7355,
-  groundSize: 30,
+  // ===== AVATAR POSITION IN ROOM =====
+  avatarX: 0,                   // Center
+  avatarY: 0,                   // On floor
+  avatarZ: 0.5,                 // Slightly forward from center
   
-  // Breathing animation - subtle chest movement
+  // ===== ROOM =====
+  roomScale: 0.5,               // Adjust based on room model
+  roomX: 0,
+  roomY: 0,
+  roomZ: -2,                    // Push room back
+  
+  // ===== FALLBACK COLORS =====
+  skyTopColor: 0xC9B8E8,        // Soft purple (like Replika)
+  skyBottomColor: 0xE8D4E8,     // Soft pink
+  groundColor: 0xD8C8D8,
+  
+  // ===== ANIMATIONS =====
   breathingSpeed: 0.5,
-  breathingAmount: 0.005,
-  
-  // Head movement - occasional looking around
+  breathingAmount: 0.004,
   lookAroundInterval: 5000,
   lookAroundDuration: 2500,
-  lookAmountX: 0.12,
-  lookAmountY: 0.06,
+  lookAmountX: 0.1,
+  lookAmountY: 0.05,
   lookSmoothing: 0.04,
-  
-  // Arm micro-movement - very subtle sway
-  armSwayAmount: 0.01,
+  armSwayAmount: 0.008,
   armSwaySpeed: 0.3,
-  
-  // Occasional gestures
   gestureInterval: 12000,
   gestureDuration: 1800,
-  gestureAmount: 0.15,
-  
-  // Blinking
+  gestureAmount: 0.12,
   blinkInterval: 3000,
   blinkVariation: 2000,
   blinkDuration: 120,
   doubleBinkChance: 0.25,
-  
-  // Lip sync
   lipSyncSmooth: 0.15,
   lipSyncIntensity: 0.8,
-  
-  // Shoulder breathing
   shoulderBreathAmount: 0.002,
 };
 
@@ -138,18 +129,18 @@ export function init3DScene(containerId = "canvas-container") {
   // Create renderer
   renderer = new THREE.WebGLRenderer({ 
     antialias: true, 
-    alpha: false,
+    alpha: true,  // Transparent background
     powerPreference: "high-performance"
   });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(container.clientWidth, container.clientHeight);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.0;
+  renderer.toneMappingExposure = 1.2;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.setClearColor(0x000000, 0); // Transparent
   
-  // Style canvas
   renderer.domElement.style.display = "block";
   renderer.domElement.style.width = "100%";
   renderer.domElement.style.height = "100%";
@@ -158,15 +149,12 @@ export function init3DScene(containerId = "canvas-container") {
 
   // Create scene
   scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x8b8ccf);
-
-  // Create anchor system
-  createAnchors();
+  // No background - will be transparent or CSS handles it
   
   // Create fallback environment
   createFallbackEnvironment();
   
-  // Create camera
+  // Create camera - FIXED POSITION (not following avatar)
   camera = new THREE.PerspectiveCamera(
     CONFIG.cameraFOV,
     container.clientWidth / container.clientHeight,
@@ -174,11 +162,12 @@ export function init3DScene(containerId = "canvas-container") {
     100
   );
   
+  // Position camera
+  camera.position.set(CONFIG.cameraX, CONFIG.cameraY, CONFIG.cameraZ);
+  camera.lookAt(CONFIG.lookAtX, CONFIG.lookAtY, CONFIG.lookAtZ);
+  
   // Setup lights
   setupLights();
-  
-  // Position camera
-  updateCamera();
 
   // Event listeners
   window.addEventListener("resize", onResize, { passive: true });
@@ -186,40 +175,22 @@ export function init3DScene(containerId = "canvas-container") {
   // Start animation loop
   animate();
 
-  console.log("[3D] ✅ Scene initialized");
+  console.log("[3D] ✅ Scene initialized (Replika-style camera)");
   return true;
-}
-
-// ============================================
-// CREATE ANCHOR SYSTEM
-// ============================================
-function createAnchors() {
-  // Room anchor - room attaches here
-  roomAnchor = new THREE.Object3D();
-  roomAnchor.name = "roomAnchor";
-  scene.add(roomAnchor);
-  
-  // Avatar anchor - avatar attaches here
-  avatarAnchor = new THREE.Object3D();
-  avatarAnchor.name = "avatarAnchor";
-  avatarAnchor.position.set(CONFIG.avatarX, CONFIG.avatarY, CONFIG.avatarZ);
-  scene.add(avatarAnchor);
-  
-  console.log("[3D] ✅ Anchor system created");
 }
 
 // ============================================
 // CREATE FALLBACK ENVIRONMENT
 // ============================================
 function createFallbackEnvironment() {
-  // Gradient sky sphere
+  // Gradient sky sphere (Replika-style soft colors)
   const skyGeo = new THREE.SphereGeometry(50, 32, 32);
   const skyMat = new THREE.ShaderMaterial({
     uniforms: {
       topColor: { value: new THREE.Color(CONFIG.skyTopColor) },
       bottomColor: { value: new THREE.Color(CONFIG.skyBottomColor) },
-      offset: { value: 10 },
-      exponent: { value: 0.6 }
+      offset: { value: 5 },
+      exponent: { value: 0.5 }
     },
     vertexShader: `
       varying vec3 vWorldPosition;
@@ -249,12 +220,12 @@ function createFallbackEnvironment() {
   fallbackSky.visible = false;
   scene.add(fallbackSky);
 
-  // Ground plane with gradient
-  const groundGeo = new THREE.PlaneGeometry(CONFIG.groundSize, CONFIG.groundSize, 1, 1);
+  // Ground plane with soft gradient
+  const groundGeo = new THREE.PlaneGeometry(40, 40, 1, 1);
   const groundMat = new THREE.ShaderMaterial({
     uniforms: {
-      centerColor: { value: new THREE.Color(0x9B8B7A) },
-      edgeColor: { value: new THREE.Color(0x6B5B4A) },
+      centerColor: { value: new THREE.Color(0xE8E0E8) },
+      edgeColor: { value: new THREE.Color(0xC8C0D0) },
     },
     vertexShader: `
       varying vec2 vUv;
@@ -287,7 +258,7 @@ function createFallbackEnvironment() {
 }
 
 // ============================================
-// SETUP LIGHTING
+// SETUP LIGHTING (Replika-style soft ambient)
 // ============================================
 function setupLights() {
   // Clear existing lights
@@ -297,61 +268,40 @@ function setupLights() {
   });
   lightsToRemove.forEach(l => scene.remove(l));
 
-  // Main directional light (key light)
-  const mainLight = new THREE.DirectionalLight(0xffffff, 1.2);
-  mainLight.position.set(3, 5, 4);
+  // Main directional light (soft key light)
+  const mainLight = new THREE.DirectionalLight(0xffffff, 0.9);
+  mainLight.position.set(3, 6, 4);
   mainLight.castShadow = true;
   mainLight.shadow.mapSize.width = 2048;
   mainLight.shadow.mapSize.height = 2048;
   mainLight.shadow.camera.near = 0.5;
-  mainLight.shadow.camera.far = 20;
-  mainLight.shadow.camera.left = -5;
-  mainLight.shadow.camera.right = 5;
-  mainLight.shadow.camera.top = 5;
-  mainLight.shadow.camera.bottom = -5;
+  mainLight.shadow.camera.far = 25;
+  mainLight.shadow.camera.left = -8;
+  mainLight.shadow.camera.right = 8;
+  mainLight.shadow.camera.top = 8;
+  mainLight.shadow.camera.bottom = -8;
   mainLight.shadow.bias = -0.0001;
   scene.add(mainLight);
 
-  // Fill light (softer, from side)
-  const fillLight = new THREE.DirectionalLight(0xffeedd, 0.5);
-  fillLight.position.set(-3, 3, 2);
+  // Fill light (soft pink tone like Replika)
+  const fillLight = new THREE.DirectionalLight(0xFFE4EC, 0.4);
+  fillLight.position.set(-4, 3, 2);
   scene.add(fillLight);
 
-  // Rim/back light (for depth)
-  const rimLight = new THREE.DirectionalLight(0xaaccff, 0.4);
-  rimLight.position.set(0, 3, -3);
+  // Rim/back light (soft blue)
+  const rimLight = new THREE.DirectionalLight(0xE4E4FF, 0.3);
+  rimLight.position.set(0, 4, -4);
   scene.add(rimLight);
 
-  // Ambient light (base illumination)
-  const ambient = new THREE.AmbientLight(0xffffff, 0.4);
+  // Strong ambient for soft look
+  const ambient = new THREE.AmbientLight(0xffffff, 0.6);
   scene.add(ambient);
 
-  // Hemisphere light (sky/ground color blend)
-  const hemi = new THREE.HemisphereLight(0x87CEEB, 0x8B7355, 0.5);
+  // Hemisphere light (purple/pink tones like Replika)
+  const hemi = new THREE.HemisphereLight(0xC9B8E8, 0xE8D4E8, 0.5);
   scene.add(hemi);
   
-  console.log("[3D] ✅ Lighting setup complete");
-}
-
-// ============================================
-// UPDATE CAMERA
-// ============================================
-function updateCamera() {
-  if (!camera || !avatarAnchor) return;
-
-  camera.position.set(
-    avatarAnchor.position.x,
-    CONFIG.cameraHeight,
-    avatarAnchor.position.z + CONFIG.cameraDistance
-  );
-
-  camera.lookAt(
-    avatarAnchor.position.x,
-    CONFIG.cameraLookAtY,
-    avatarAnchor.position.z
-  );
-  
-  camera.updateProjectionMatrix();
+  console.log("[3D] ✅ Replika-style lighting setup");
 }
 
 // ============================================
@@ -365,7 +315,7 @@ export async function loadVRMAvatar(vrmPath) {
 
   // Remove existing VRM
   if (currentVRM) {
-    avatarAnchor.remove(currentVRM.scene);
+    scene.remove(currentVRM.scene);
     VRMUtils.deepDispose(currentVRM.scene);
     currentVRM = null;
     avatarReady = false;
@@ -402,11 +352,11 @@ export async function loadVRMAvatar(vrmPath) {
         const scale = CONFIG.avatarHeight / size.y;
         vrm.scene.scale.setScalar(scale);
 
-        // Position: center horizontally, feet on ground
+        // Position avatar at configured spot
         vrm.scene.position.set(
-          -center.x * scale,
-          -box.min.y * scale,
-          -center.z * scale
+          CONFIG.avatarX - center.x * scale,
+          CONFIG.avatarY - box.min.y * scale,  // Feet on ground
+          CONFIG.avatarZ - center.z * scale
         );
 
         // Enable shadows
@@ -414,14 +364,11 @@ export async function loadVRMAvatar(vrmPath) {
           if (obj.isMesh) {
             obj.castShadow = true;
             obj.receiveShadow = true;
-            if (obj.material) {
-              obj.material.needsUpdate = true;
-            }
           }
         });
 
-        // Attach to anchor
-        avatarAnchor.add(vrm.scene);
+        // Add directly to scene
+        scene.add(vrm.scene);
         
         currentVRM = vrm;
         avatarReady = true;
@@ -437,20 +384,10 @@ export async function loadVRMAvatar(vrmPath) {
 
         // Set relaxed pose
         setRelaxedPose(vrm);
-        
-        // Update camera
-        updateCamera();
 
         if (loadingEl) loadingEl.classList.remove("active");
 
-        console.log("[3D] ✅ VRM loaded successfully!");
-        
-        // Log available expressions
-        if (vrm.expressionManager) {
-          const expressions = Object.keys(vrm.expressionManager.expressionMap);
-          console.log("[3D] Available expressions:", expressions);
-        }
-
+        console.log("[3D] ✅ VRM loaded at position:", vrm.scene.position);
         resolve(vrm);
       },
       (progress) => {
@@ -479,7 +416,7 @@ export async function loadRoomModel(glbPath) {
 
   // Remove existing room
   if (currentRoom) {
-    roomAnchor.remove(currentRoom);
+    scene.remove(currentRoom);
     currentRoom = null;
   }
 
@@ -505,10 +442,10 @@ export async function loadRoomModel(glbPath) {
         box.setFromObject(room);
         const scaledCenter = box.getCenter(new THREE.Vector3());
 
-        // Position: floor at y=0, pushed back on Z axis
+        // Position room: floor at y=0, centered, pushed back
         room.position.set(
-          -scaledCenter.x,
-          -box.min.y,
+          CONFIG.roomX - scaledCenter.x,
+          CONFIG.roomY - box.min.y,
           CONFIG.roomZ - scaledCenter.z
         );
 
@@ -519,13 +456,12 @@ export async function loadRoomModel(glbPath) {
             obj.receiveShadow = true;
             if (obj.material) {
               obj.material.side = THREE.DoubleSide;
-              obj.material.needsUpdate = true;
             }
           }
         });
 
-        // Add to room anchor
-        roomAnchor.add(room);
+        // Add to scene
+        scene.add(room);
         currentRoom = room;
         hasRoomLoaded = true;
 
@@ -535,7 +471,7 @@ export async function loadRoomModel(glbPath) {
 
         if (loadingEl) loadingEl.classList.remove("active");
 
-        console.log("[3D] ✅ Room loaded! Scale:", CONFIG.roomScale);
+        console.log("[3D] ✅ Room loaded at position:", room.position);
         resolve(room);
       },
       (progress) => {
@@ -547,8 +483,6 @@ export async function loadRoomModel(glbPath) {
       (error) => {
         console.error("[3D] Room load failed:", error);
         if (loadingEl) loadingEl.classList.remove("active");
-        
-        // Use fallback environment
         useFallbackEnvironment();
         reject(error);
       }
@@ -560,19 +494,69 @@ export async function loadRoomModel(glbPath) {
 // USE FALLBACK ENVIRONMENT
 // ============================================
 export function useFallbackEnvironment() {
-  // Remove room if exists
   if (currentRoom) {
-    roomAnchor.remove(currentRoom);
+    scene.remove(currentRoom);
     currentRoom = null;
   }
   
   hasRoomLoaded = false;
   
-  // Show fallback sky and ground
   if (fallbackSky) fallbackSky.visible = true;
   if (fallbackGround) fallbackGround.visible = true;
   
-  console.log("[3D] ✅ Using fallback environment (sky + ground)");
+  console.log("[3D] ✅ Using fallback environment");
+}
+
+// ============================================
+// ADJUST CAMERA (for fine-tuning)
+// ============================================
+export function setCameraPosition(x, y, z) {
+  if (camera) {
+    camera.position.set(x, y, z);
+    camera.lookAt(CONFIG.lookAtX, CONFIG.lookAtY, CONFIG.lookAtZ);
+  }
+}
+
+export function setCameraLookAt(x, y, z) {
+  if (camera) {
+    camera.lookAt(x, y, z);
+  }
+}
+
+export function setCameraFOV(fov) {
+  if (camera) {
+    camera.fov = fov;
+    camera.updateProjectionMatrix();
+  }
+}
+
+// ============================================
+// ADJUST AVATAR POSITION (for fine-tuning)
+// ============================================
+export function setAvatarPosition(x, y, z) {
+  if (currentVRM) {
+    const box = new THREE.Box3().setFromObject(currentVRM.scene);
+    currentVRM.scene.position.set(x, y - box.min.y, z);
+  }
+}
+
+// ============================================
+// ADJUST ROOM (for fine-tuning)
+// ============================================
+export function setRoomPosition(x, y, z) {
+  if (currentRoom) {
+    const box = new THREE.Box3().setFromObject(currentRoom);
+    currentRoom.position.set(x, y - box.min.y, z);
+  }
+}
+
+export function setRoomScale(scale) {
+  if (currentRoom) {
+    currentRoom.scale.setScalar(scale);
+    // Re-ground after scaling
+    const box = new THREE.Box3().setFromObject(currentRoom);
+    currentRoom.position.y = -box.min.y;
+  }
 }
 
 // ============================================
@@ -582,60 +566,41 @@ function setRelaxedPose(vrm) {
   if (!vrm?.humanoid) return;
 
   try {
-    // Upper arms - down at sides
-    const leftUpperArm = vrm.humanoid.getNormalizedBoneNode("leftUpperArm");
-    const rightUpperArm = vrm.humanoid.getNormalizedBoneNode("rightUpperArm");
-    
-    if (leftUpperArm) {
-      leftUpperArm.rotation.set(
+    const bones = {
+      leftUpperArm: vrm.humanoid.getNormalizedBoneNode("leftUpperArm"),
+      rightUpperArm: vrm.humanoid.getNormalizedBoneNode("rightUpperArm"),
+      leftLowerArm: vrm.humanoid.getNormalizedBoneNode("leftLowerArm"),
+      rightLowerArm: vrm.humanoid.getNormalizedBoneNode("rightLowerArm"),
+      leftHand: vrm.humanoid.getNormalizedBoneNode("leftHand"),
+      rightHand: vrm.humanoid.getNormalizedBoneNode("rightHand"),
+    };
+
+    if (bones.leftUpperArm) {
+      bones.leftUpperArm.rotation.set(
         baseRotations.leftUpperArm.x,
         baseRotations.leftUpperArm.y,
         baseRotations.leftUpperArm.z
       );
     }
-    if (rightUpperArm) {
-      rightUpperArm.rotation.set(
+    if (bones.rightUpperArm) {
+      bones.rightUpperArm.rotation.set(
         baseRotations.rightUpperArm.x,
         baseRotations.rightUpperArm.y,
         baseRotations.rightUpperArm.z
       );
     }
-
-    // Lower arms - slight bend
-    const leftLowerArm = vrm.humanoid.getNormalizedBoneNode("leftLowerArm");
-    const rightLowerArm = vrm.humanoid.getNormalizedBoneNode("rightLowerArm");
-    
-    if (leftLowerArm) {
-      leftLowerArm.rotation.set(
+    if (bones.leftLowerArm) {
+      bones.leftLowerArm.rotation.set(
         baseRotations.leftLowerArm.x,
         baseRotations.leftLowerArm.y,
         baseRotations.leftLowerArm.z
       );
     }
-    if (rightLowerArm) {
-      rightLowerArm.rotation.set(
+    if (bones.rightLowerArm) {
+      bones.rightLowerArm.rotation.set(
         baseRotations.rightLowerArm.x,
         baseRotations.rightLowerArm.y,
         baseRotations.rightLowerArm.z
-      );
-    }
-
-    // Hands - natural position
-    const leftHand = vrm.humanoid.getNormalizedBoneNode("leftHand");
-    const rightHand = vrm.humanoid.getNormalizedBoneNode("rightHand");
-    
-    if (leftHand) {
-      leftHand.rotation.set(
-        baseRotations.leftHand.x,
-        baseRotations.leftHand.y,
-        baseRotations.leftHand.z
-      );
-    }
-    if (rightHand) {
-      rightHand.rotation.set(
-        baseRotations.rightHand.x,
-        baseRotations.rightHand.y,
-        baseRotations.rightHand.z
       );
     }
 
@@ -646,59 +611,39 @@ function setRelaxedPose(vrm) {
 }
 
 // ============================================
-// IDLE ANIMATION - Main update function
+// IDLE ANIMATIONS
 // ============================================
 function updateIdleAnimation(delta) {
   if (!currentVRM || !avatarReady) return;
-
   idleTime += delta;
-
-  // Update all animation components
+  
   updateBreathing();
   updateHeadMovement(delta);
   updateArmMovement();
   updateGestures(delta);
 }
 
-// ============================================
-// BREATHING ANIMATION
-// ============================================
 function updateBreathing() {
   if (!currentVRM?.humanoid) return;
 
   const breathCycle = Math.sin(idleTime * CONFIG.breathingSpeed * Math.PI * 2);
   const breathOffset = breathCycle * CONFIG.breathingAmount;
   
-  // Chest expansion
   const chest = currentVRM.humanoid.getNormalizedBoneNode("chest");
   const upperChest = currentVRM.humanoid.getNormalizedBoneNode("upperChest");
   const spine = currentVRM.humanoid.getNormalizedBoneNode("spine");
   
-  if (upperChest) {
-    upperChest.rotation.x = breathOffset * 1.5;
-  }
-  if (chest) {
-    chest.rotation.x = breathOffset;
-  }
-  if (spine) {
-    spine.rotation.x = breathOffset * 0.3;
-  }
+  if (upperChest) upperChest.rotation.x = breathOffset * 1.5;
+  if (chest) chest.rotation.x = breathOffset;
+  if (spine) spine.rotation.x = breathOffset * 0.3;
   
-  // Subtle shoulder rise with breath
   const leftShoulder = currentVRM.humanoid.getNormalizedBoneNode("leftShoulder");
   const rightShoulder = currentVRM.humanoid.getNormalizedBoneNode("rightShoulder");
   
-  if (leftShoulder) {
-    leftShoulder.position.y = breathCycle * CONFIG.shoulderBreathAmount;
-  }
-  if (rightShoulder) {
-    rightShoulder.position.y = breathCycle * CONFIG.shoulderBreathAmount;
-  }
+  if (leftShoulder) leftShoulder.position.y = breathCycle * CONFIG.shoulderBreathAmount;
+  if (rightShoulder) rightShoulder.position.y = breathCycle * CONFIG.shoulderBreathAmount;
 }
 
-// ============================================
-// HEAD MOVEMENT - Looking around naturally
-// ============================================
 function updateHeadMovement(delta) {
   if (!currentVRM?.humanoid) return;
 
@@ -707,116 +652,83 @@ function updateHeadMovement(delta) {
   
   if (!head) return;
 
-  // Update look timer
   lookTimer += delta * 1000;
 
-  // Decide to look somewhere new
   if (lookTimer > CONFIG.lookAroundInterval + Math.random() * CONFIG.lookAroundDuration) {
     lookTarget.x = (Math.random() - 0.5) * 2 * CONFIG.lookAmountX;
     lookTarget.y = (Math.random() - 0.5) * 2 * CONFIG.lookAmountY;
     lookTimer = 0;
   }
 
-  // Return to center after looking duration
   if (lookTimer > CONFIG.lookAroundDuration && lookTimer < CONFIG.lookAroundInterval) {
     lookTarget.x *= 0.98;
     lookTarget.y *= 0.98;
   }
 
-  // Smooth interpolation
   currentLook.x += (lookTarget.x - currentLook.x) * CONFIG.lookSmoothing;
   currentLook.y += (lookTarget.y - currentLook.y) * CONFIG.lookSmoothing;
 
-  // Apply to head
   head.rotation.y = currentLook.x;
   head.rotation.x = currentLook.y;
 
-  // Neck follows head slightly
   if (neck) {
     neck.rotation.y = currentLook.x * 0.3;
     neck.rotation.x = currentLook.y * 0.25;
   }
 }
 
-// ============================================
-// ARM MOVEMENT - Subtle micro-movements
-// ============================================
 function updateArmMovement() {
   if (!currentVRM?.humanoid || isGesturing) return;
 
   const leftUpperArm = currentVRM.humanoid.getNormalizedBoneNode("leftUpperArm");
   const rightUpperArm = currentVRM.humanoid.getNormalizedBoneNode("rightUpperArm");
-  const leftLowerArm = currentVRM.humanoid.getNormalizedBoneNode("leftLowerArm");
-  const rightLowerArm = currentVRM.humanoid.getNormalizedBoneNode("rightLowerArm");
 
-  // Subtle sway synchronized with breathing
   const armSway = Math.sin(idleTime * CONFIG.armSwaySpeed) * CONFIG.armSwayAmount;
-  const armSway2 = Math.sin(idleTime * CONFIG.armSwaySpeed * 0.7 + 0.5) * CONFIG.armSwayAmount * 0.7;
   
   if (leftUpperArm) {
     leftUpperArm.rotation.z = baseRotations.leftUpperArm.z + armSway;
-    leftUpperArm.rotation.x = baseRotations.leftUpperArm.x + armSway2 * 0.3;
   }
   if (rightUpperArm) {
     rightUpperArm.rotation.z = baseRotations.rightUpperArm.z - armSway;
-    rightUpperArm.rotation.x = baseRotations.rightUpperArm.x + armSway2 * 0.3;
-  }
-
-  // Lower arms micro-movement
-  if (leftLowerArm) {
-    leftLowerArm.rotation.y = baseRotations.leftLowerArm.y + armSway * 0.4;
-  }
-  if (rightLowerArm) {
-    rightLowerArm.rotation.y = baseRotations.rightLowerArm.y + armSway * 0.4;
   }
 }
 
-// ============================================
-// OCCASIONAL GESTURES
-// ============================================
 function updateGestures(delta) {
   if (!currentVRM?.humanoid) return;
 
   gestureTimer += delta * 1000;
 
-  // Start a new gesture occasionally
   if (!isGesturing && gestureTimer > CONFIG.gestureInterval + Math.random() * 5000) {
     isGesturing = true;
     gestureProgress = 0;
     gestureTimer = 0;
-    gestureType = Math.floor(Math.random() * 3); // 0, 1, or 2
+    gestureType = Math.floor(Math.random() * 3);
   }
 
   if (isGesturing) {
     gestureProgress += delta * 1000;
-    
     const progress = gestureProgress / CONFIG.gestureDuration;
-    const eased = Math.sin(progress * Math.PI); // Smooth in-out
+    const eased = Math.sin(progress * Math.PI);
     
     const rightUpperArm = currentVRM.humanoid.getNormalizedBoneNode("rightUpperArm");
     const rightLowerArm = currentVRM.humanoid.getNormalizedBoneNode("rightLowerArm");
     const leftUpperArm = currentVRM.humanoid.getNormalizedBoneNode("leftUpperArm");
     
-    // Different gesture types
     switch (gestureType) {
-      case 0: // Right hand slight raise
+      case 0:
         if (rightUpperArm) {
           rightUpperArm.rotation.z = baseRotations.rightUpperArm.z + eased * CONFIG.gestureAmount;
-          rightUpperArm.rotation.x = baseRotations.rightUpperArm.x - eased * CONFIG.gestureAmount * 0.5;
         }
         if (rightLowerArm) {
           rightLowerArm.rotation.y = baseRotations.rightLowerArm.y - eased * CONFIG.gestureAmount;
         }
         break;
-        
-      case 1: // Left hand slight raise
+      case 1:
         if (leftUpperArm) {
           leftUpperArm.rotation.z = baseRotations.leftUpperArm.z - eased * CONFIG.gestureAmount;
-          leftUpperArm.rotation.x = baseRotations.leftUpperArm.x - eased * CONFIG.gestureAmount * 0.5;
         }
         break;
-        
-      case 2: // Both hands slight adjustment
+      case 2:
         if (rightUpperArm) {
           rightUpperArm.rotation.z = baseRotations.rightUpperArm.z + eased * CONFIG.gestureAmount * 0.7;
         }
@@ -826,7 +738,6 @@ function updateGestures(delta) {
         break;
     }
 
-    // End gesture
     if (gestureProgress >= CONFIG.gestureDuration) {
       isGesturing = false;
     }
@@ -846,7 +757,6 @@ function updateBlinking(delta) {
   if (blinkTimer >= interval) {
     const expr = currentVRM.expressionManager;
     
-    // Blink
     if (expr.expressionMap["blink"]) {
       expr.setValue("blink", 1.0);
       
@@ -854,7 +764,6 @@ function updateBlinking(delta) {
         if (currentVRM?.expressionManager?.expressionMap["blink"]) {
           currentVRM.expressionManager.setValue("blink", 0.0);
           
-          // Chance of double blink
           if (Math.random() < CONFIG.doubleBinkChance) {
             setTimeout(() => {
               if (currentVRM?.expressionManager?.expressionMap["blink"]) {
@@ -881,28 +790,19 @@ function updateBlinking(delta) {
 function updateLipSync() {
   if (!currentVRM?.expressionManager) return;
 
-  // Smooth interpolation to target
   currentMouthOpenness += (targetMouthOpenness - currentMouthOpenness) * CONFIG.lipSyncSmooth;
 
   const expr = currentVRM.expressionManager;
   const intensity = CONFIG.lipSyncIntensity;
   
-  // Primary mouth shape (aa)
   if (expr.expressionMap["aa"]) {
     expr.setValue("aa", currentMouthOpenness * intensity);
   }
-  
-  // Secondary shapes for variety
   if (expr.expressionMap["oh"]) {
     expr.setValue("oh", currentMouthOpenness * 0.3 * Math.abs(Math.sin(idleTime * 10)));
   }
   if (expr.expressionMap["ih"]) {
     expr.setValue("ih", currentMouthOpenness * 0.2 * Math.abs(Math.cos(idleTime * 12)));
-  }
-
-  // Slight expression while talking
-  if (expr.expressionMap["happy"]) {
-    expr.setValue("happy", currentMouthOpenness * 0.1);
   }
 }
 
@@ -919,18 +819,11 @@ export function avatarStopTalking() {
   isTalking = false;
   targetMouthOpenness = 0;
   
-  // Reset all mouth expressions
   if (currentVRM?.expressionManager) {
     const expr = currentVRM.expressionManager;
-    const mouthExpressions = ["aa", "oh", "ih", "ou", "ee", "a"];
-    mouthExpressions.forEach(name => {
-      if (expr.expressionMap[name]) {
-        expr.setValue(name, 0);
-      }
+    ["aa", "oh", "ih", "ou", "ee", "a"].forEach(name => {
+      if (expr.expressionMap[name]) expr.setValue(name, 0);
     });
-    if (expr.expressionMap["happy"]) {
-      expr.setValue("happy", 0);
-    }
   }
   
   console.log("[3D] 🤐 Avatar stopped talking");
@@ -943,8 +836,6 @@ function animateTalking() {
   }
 
   const time = Date.now() * 0.001;
-  
-  // Create natural speech-like variation
   const variation = 
     Math.sin(time * 8) * 0.2 + 
     Math.sin(time * 13) * 0.15 +
@@ -952,7 +843,6 @@ function animateTalking() {
     Math.random() * 0.1;
   
   targetMouthOpenness = Math.max(0.1, Math.min(0.85, 0.35 + variation));
-
   requestAnimationFrame(animateTalking);
 }
 
@@ -992,11 +882,9 @@ function animate() {
       updateLipSync();
     }
 
-    // Update VRM
     currentVRM.update(delta);
   }
 
-  // Render
   if (renderer && scene && camera) {
     renderer.render(scene, camera);
   }
@@ -1035,13 +923,13 @@ export function dispose3D() {
   }
 
   if (currentVRM) {
-    avatarAnchor?.remove(currentVRM.scene);
+    scene.remove(currentVRM.scene);
     VRMUtils.deepDispose(currentVRM.scene);
     currentVRM = null;
   }
 
   if (currentRoom) {
-    roomAnchor?.remove(currentRoom);
+    scene.remove(currentRoom);
     currentRoom = null;
   }
 
@@ -1063,26 +951,10 @@ export function dispose3D() {
 // ============================================
 // UTILITY EXPORTS
 // ============================================
-export function isAvatarReady() {
-  return avatarReady;
-}
-
-export function getVRM() {
-  return currentVRM;
-}
-
-export function getScene() {
-  return scene;
-}
-
-export function hasRoom() {
-  return hasRoomLoaded;
-}
-
-export function getCamera() {
-  return camera;
-}
-
-export function getRenderer() {
-  return renderer;
-}
+export function isAvatarReady() { return avatarReady; }
+export function getVRM() { return currentVRM; }
+export function getScene() { return scene; }
+export function hasRoom() { return hasRoomLoaded; }
+export function getCamera() { return camera; }
+export function getRenderer() { return renderer; }
+export function getConfig() { return CONFIG; }
