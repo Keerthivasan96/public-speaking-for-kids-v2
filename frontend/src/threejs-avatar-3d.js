@@ -1,6 +1,6 @@
 // ============================================
-// threejs-avatar-3d.js - FIXED ROOM POSITIONING
-// Avatar stays visible inside room
+// threejs-avatar-3d.js - REPLIKA-STYLE ARCHITECTURE
+// Room is default, avatar anchored properly
 // ============================================
 
 import * as THREE from "three";
@@ -18,6 +18,16 @@ let clock = new THREE.Clock();
 let container = null;
 let rafId = null;
 
+// ANCHOR SYSTEM (Replika-style)
+let avatarAnchor = null;  // Avatar attaches to this
+let roomAnchor = null;    // Room attaches to this
+
+// Room and environment
+let currentRoom = null;
+let fallbackGround = null;
+let fallbackSky = null;
+let useRoom = true;  // Room is DEFAULT ON
+
 // Animation timers
 let idleTime = 0;
 let blinkTimer = 0;
@@ -29,74 +39,54 @@ let lookTarget = { x: 0, y: 0 };
 let currentMouthOpenness = 0;
 let targetMouthOpenness = 0;
 
-// Store base rotations for arms
+// Base pose
 let baseRotations = {
   leftUpperArm: { x: 0.2, y: 0, z: 1.0 },
   rightUpperArm: { x: 0.2, y: 0, z: -1.0 },
   leftLowerArm: { x: 0, y: -0.2, z: 0 },
   rightLowerArm: { x: 0, y: 0.2, z: 0 },
-  head: { x: 0, y: 0, z: 0 },
-  spine: { x: 0, y: 0, z: 0 }
 };
 
-// Room objects
-let currentRoom = null;
-let defaultGround = null;
-let defaultSky = null;
-
-// Avatar position (store for room switching)
-let avatarPosition = { x: 0, y: 0, z: 0 };
-
 // ============================================
-// SETTINGS
+// CONFIGURATION
 // ============================================
 const CONFIG = {
-  // Camera - FIXED for full body view
-  cameraDistance: 3.5,
-  cameraHeight: 1.0,
-  cameraFOV: 30,
-  cameraLookAtY: 0.85,
-  
   // Avatar
-  avatarHeight: 1.6,
+  avatarHeight: 1.55,
   
-  // Ground
-  groundSize: 30,
+  // Camera settings for ROOM mode (cinematic, chest-up like Replika)
+  room: {
+    cameraDistance: 2.0,
+    cameraHeight: 1.35,
+    cameraLookAtY: 1.15,
+    cameraFOV: 35,
+    avatarZ: -0.3,  // Avatar position relative to room center
+  },
   
-  // Sky colors
-  skyTopColor: 0x87CEEB,
-  skyBottomColor: 0xE6B3CC,
+  // Camera settings for NO ROOM mode (full body view)
+  noRoom: {
+    cameraDistance: 3.2,
+    cameraHeight: 1.0,
+    cameraLookAtY: 0.85,
+    cameraFOV: 32,
+    avatarZ: 0,
+  },
   
-  // Breathing
+  // Animation
   breathingSpeed: 0.5,
   breathingAmount: 0.005,
-  
-  // Head look
   lookAroundInterval: 5000,
   lookAroundDuration: 2500,
   lookAmountX: 0.1,
   lookAmountY: 0.05,
-  
-  // Arm micro-movement
   armSwayAmount: 0.008,
   armSwaySpeed: 0.3,
-  
-  // Gesture
   gestureInterval: 10000,
   gestureDuration: 1500,
-  
-  // Blinking
   blinkInterval: 3000,
   blinkDuration: 120,
   doubleBinkChance: 0.3,
-  
-  // Lip sync
   lipSyncSmooth: 0.15,
-  
-  // Room settings
-  roomScale: 0.5,           // Scale room down to fit
-  roomPositionY: 0,         // Room floor level
-  avatarInRoomZ: 1.5,       // How far back avatar stands in room
 };
 
 // ============================================
@@ -109,12 +99,14 @@ export function init3DScene(containerId = "canvas-container") {
     return false;
   }
 
+  // Cleanup
   if (rafId) {
     cancelAnimationFrame(rafId);
     rafId = null;
   }
   container.querySelectorAll("canvas").forEach(c => c.remove());
 
+  // Renderer
   renderer = new THREE.WebGLRenderer({ 
     antialias: true, 
     alpha: false 
@@ -126,28 +118,36 @@ export function init3DScene(containerId = "canvas-container") {
   renderer.toneMappingExposure = 1.0;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  
   container.appendChild(renderer.domElement);
 
+  // Scene
   scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x1a1a2e);
   
-  createSky();
-  createGround();
+  // Create anchor system
+  createAnchors();
   
+  // Create fallback environment (only shown when no room)
+  createFallbackEnvironment();
+  
+  // Camera
   camera = new THREE.PerspectiveCamera(
-    CONFIG.cameraFOV,
+    CONFIG.noRoom.cameraFOV,
     container.clientWidth / container.clientHeight,
     0.1,
     100
   );
   
-  // Set camera for full body view
+  // Lights
+  setupLights();
+  
+  // Initial camera position
   updateCamera();
 
-  setupLights();
-
+  // Events
   window.addEventListener("resize", onResize, { passive: true });
 
+  // Start animation
   animate();
 
   console.log("[3D] ✅ Scene initialized");
@@ -155,33 +155,33 @@ export function init3DScene(containerId = "canvas-container") {
 }
 
 // ============================================
-// UPDATE CAMERA - Keep avatar in view
+// CREATE ANCHOR SYSTEM
 // ============================================
-function updateCamera() {
-  if (!camera) return;
+function createAnchors() {
+  // Room anchor - room attaches here
+  roomAnchor = new THREE.Object3D();
+  roomAnchor.name = "roomAnchor";
+  scene.add(roomAnchor);
   
-  camera.position.set(
-    avatarPosition.x,
-    CONFIG.cameraHeight,
-    avatarPosition.z + CONFIG.cameraDistance
-  );
-  camera.lookAt(
-    avatarPosition.x,
-    CONFIG.cameraLookAtY,
-    avatarPosition.z
-  );
+  // Avatar anchor - avatar attaches here, INDEPENDENT of room
+  avatarAnchor = new THREE.Object3D();
+  avatarAnchor.name = "avatarAnchor";
+  avatarAnchor.position.set(0, 0, 0);
+  scene.add(avatarAnchor);
+  
+  console.log("[3D] ✅ Anchor system created");
 }
 
 // ============================================
-// CREATE SKY
+// CREATE FALLBACK ENVIRONMENT (when no room)
 // ============================================
-function createSky() {
+function createFallbackEnvironment() {
+  // Sky sphere
   const skyGeo = new THREE.SphereGeometry(50, 32, 32);
-  
   const skyMat = new THREE.ShaderMaterial({
     uniforms: {
-      topColor: { value: new THREE.Color(CONFIG.skyTopColor) },
-      bottomColor: { value: new THREE.Color(CONFIG.skyBottomColor) },
+      topColor: { value: new THREE.Color(0x87CEEB) },
+      bottomColor: { value: new THREE.Color(0xE6B3CC) },
       offset: { value: 10 },
       exponent: { value: 0.6 }
     },
@@ -206,87 +206,87 @@ function createSky() {
     `,
     side: THREE.BackSide
   });
+  fallbackSky = new THREE.Mesh(skyGeo, skyMat);
+  fallbackSky.name = "fallbackSky";
+  fallbackSky.visible = false;  // Hidden by default (room is default)
+  scene.add(fallbackSky);
 
-  defaultSky = new THREE.Mesh(skyGeo, skyMat);
-  defaultSky.name = "defaultSky";
-  scene.add(defaultSky);
-}
-
-// ============================================
-// CREATE GROUND
-// ============================================
-function createGround() {
-  const groundGeo = new THREE.PlaneGeometry(CONFIG.groundSize, CONFIG.groundSize);
-  
-  const groundMat = new THREE.ShaderMaterial({
-    uniforms: {
-      centerColor: { value: new THREE.Color(0x9B8B7A) },
-      edgeColor: { value: new THREE.Color(0x6B5B4A) },
-    },
-    vertexShader: `
-      varying vec2 vUv;
-      void main() {
-        vUv = uv;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }
-    `,
-    fragmentShader: `
-      uniform vec3 centerColor;
-      uniform vec3 edgeColor;
-      varying vec2 vUv;
-      void main() {
-        float dist = distance(vUv, vec2(0.5, 0.5));
-        vec3 color = mix(centerColor, edgeColor, smoothstep(0.0, 0.7, dist));
-        gl_FragColor = vec4(color, 1.0);
-      }
-    `
+  // Ground plane
+  const groundGeo = new THREE.PlaneGeometry(30, 30);
+  const groundMat = new THREE.MeshStandardMaterial({
+    color: 0x8B7355,
+    roughness: 0.9,
   });
-
-  defaultGround = new THREE.Mesh(groundGeo, groundMat);
-  defaultGround.rotation.x = -Math.PI / 2;
-  defaultGround.position.y = 0;
-  defaultGround.receiveShadow = true;
-  defaultGround.name = "defaultGround";
-  scene.add(defaultGround);
+  fallbackGround = new THREE.Mesh(groundGeo, groundMat);
+  fallbackGround.rotation.x = -Math.PI / 2;
+  fallbackGround.position.y = 0;
+  fallbackGround.receiveShadow = true;
+  fallbackGround.name = "fallbackGround";
+  fallbackGround.visible = false;  // Hidden by default
+  scene.add(fallbackGround);
 }
 
 // ============================================
-// SETUP LIGHTING
+// SETUP LIGHTS
 // ============================================
 function setupLights() {
-  // Clear existing lights
-  const lightsToRemove = [];
-  scene.traverse((obj) => {
-    if (obj.isLight) lightsToRemove.push(obj);
-  });
-  lightsToRemove.forEach(l => scene.remove(l));
-
-  const mainLight = new THREE.DirectionalLight(0xffffff, 1.2);
-  mainLight.position.set(3, 5, 3);
+  // Main directional light
+  const mainLight = new THREE.DirectionalLight(0xffffff, 1.0);
+  mainLight.position.set(2, 4, 3);
   mainLight.castShadow = true;
   mainLight.shadow.mapSize.width = 2048;
   mainLight.shadow.mapSize.height = 2048;
   mainLight.shadow.camera.near = 0.5;
-  mainLight.shadow.camera.far = 20;
+  mainLight.shadow.camera.far = 15;
   mainLight.shadow.camera.left = -5;
   mainLight.shadow.camera.right = 5;
   mainLight.shadow.camera.top = 5;
   mainLight.shadow.camera.bottom = -5;
   scene.add(mainLight);
 
-  const fillLight = new THREE.DirectionalLight(0xffeedd, 0.5);
-  fillLight.position.set(-2, 3, -1);
+  // Fill light (softer, from side)
+  const fillLight = new THREE.DirectionalLight(0xffeedd, 0.4);
+  fillLight.position.set(-2, 2, 1);
   scene.add(fillLight);
 
-  const backLight = new THREE.DirectionalLight(0xaaccff, 0.4);
-  backLight.position.set(0, 2, -3);
-  scene.add(backLight);
+  // Rim/back light
+  const rimLight = new THREE.DirectionalLight(0xaaccff, 0.3);
+  rimLight.position.set(0, 2, -2);
+  scene.add(rimLight);
 
-  const hemiLight = new THREE.HemisphereLight(0x87CEEB, 0x8B7355, 0.6);
-  scene.add(hemiLight);
-
-  const ambient = new THREE.AmbientLight(0xffffff, 0.4);
+  // Ambient
+  const ambient = new THREE.AmbientLight(0xffffff, 0.5);
   scene.add(ambient);
+
+  // Hemisphere light for natural feel
+  const hemi = new THREE.HemisphereLight(0x87CEEB, 0x8B7355, 0.4);
+  scene.add(hemi);
+}
+
+// ============================================
+// UPDATE CAMERA - Based on room state
+// ============================================
+function updateCamera() {
+  if (!camera || !avatarAnchor) return;
+  
+  const cfg = useRoom ? CONFIG.room : CONFIG.noRoom;
+  
+  camera.fov = cfg.cameraFOV;
+  camera.updateProjectionMatrix();
+  
+  // Camera position relative to avatar anchor
+  camera.position.set(
+    avatarAnchor.position.x,
+    cfg.cameraHeight,
+    avatarAnchor.position.z + cfg.cameraDistance
+  );
+  
+  // Look at avatar chest area
+  camera.lookAt(
+    avatarAnchor.position.x,
+    cfg.cameraLookAtY,
+    avatarAnchor.position.z
+  );
 }
 
 // ============================================
@@ -298,8 +298,9 @@ export async function loadVRMAvatar(vrmPath) {
   const loadingEl = document.getElementById("loading-indicator");
   if (loadingEl) loadingEl.classList.add("active");
 
+  // Remove existing VRM from anchor
   if (currentVRM) {
-    scene.remove(currentVRM.scene);
+    avatarAnchor.remove(currentVRM.scene);
     VRMUtils.deepDispose(currentVRM.scene);
     currentVRM = null;
     avatarReady = false;
@@ -324,24 +325,25 @@ export async function loadVRMAvatar(vrmPath) {
         VRMUtils.removeUnnecessaryVertices(gltf.scene);
         VRMUtils.removeUnnecessaryJoints(gltf.scene);
 
+        // Rotate to face camera
         vrm.scene.rotation.y = Math.PI;
 
-        // Calculate size and scale
+        // Scale to target height
         const box = new THREE.Box3().setFromObject(vrm.scene);
         const size = box.getSize(new THREE.Vector3());
         const center = box.getCenter(new THREE.Vector3());
 
-        const targetHeight = CONFIG.avatarHeight;
-        const scale = targetHeight / size.y;
+        const scale = CONFIG.avatarHeight / size.y;
         vrm.scene.scale.setScalar(scale);
 
-        // Position avatar
+        // Position: center horizontally, feet on ground (y=0)
         vrm.scene.position.set(
-          avatarPosition.x - center.x * scale,
-          avatarPosition.y - box.min.y * scale,
-          avatarPosition.z - center.z * scale
+          -center.x * scale,
+          -box.min.y * scale,
+          -center.z * scale
         );
 
+        // Enable shadows
         vrm.scene.traverse((obj) => {
           if (obj.isMesh) {
             obj.castShadow = true;
@@ -349,7 +351,9 @@ export async function loadVRMAvatar(vrmPath) {
           }
         });
 
-        scene.add(vrm.scene);
+        // ATTACH TO ANCHOR (not scene directly!)
+        avatarAnchor.add(vrm.scene);
+        
         currentVRM = vrm;
         avatarReady = true;
 
@@ -360,27 +364,28 @@ export async function loadVRMAvatar(vrmPath) {
         lookTimer = 0;
         lookTarget = { x: 0, y: 0 };
 
+        // Set pose
         setRelaxedPose(vrm);
-
-        // Update camera to follow avatar
+        
+        // Position avatar anchor based on room state
+        positionAvatarAnchor();
+        
+        // Update camera
         updateCamera();
 
         if (loadingEl) loadingEl.classList.remove("active");
 
-        console.log("[3D] ✅ VRM loaded!");
-        
-        if (vrm.expressionManager) {
-          console.log("[3D] Expressions:", Object.keys(vrm.expressionManager.expressionMap));
-        }
-
+        console.log("[3D] ✅ VRM loaded and anchored!");
         resolve(vrm);
       },
       (progress) => {
-        const percent = (progress.loaded / progress.total * 100).toFixed(0);
-        console.log(`[3D] Loading: ${percent}%`);
+        if (progress.total > 0) {
+          const percent = (progress.loaded / progress.total * 100).toFixed(0);
+          console.log(`[3D] VRM: ${percent}%`);
+        }
       },
       (error) => {
-        console.error("[3D] Failed:", error);
+        console.error("[3D] VRM failed:", error);
         if (loadingEl) loadingEl.classList.remove("active");
         reject(error);
       }
@@ -389,7 +394,21 @@ export async function loadVRMAvatar(vrmPath) {
 }
 
 // ============================================
-// LOAD ROOM MODEL - FIXED POSITIONING
+// POSITION AVATAR ANCHOR
+// ============================================
+function positionAvatarAnchor() {
+  if (!avatarAnchor) return;
+  
+  const cfg = useRoom ? CONFIG.room : CONFIG.noRoom;
+  
+  // Avatar anchor position
+  avatarAnchor.position.set(0, 0, cfg.avatarZ);
+  
+  console.log("[3D] Avatar anchor at:", avatarAnchor.position);
+}
+
+// ============================================
+// LOAD ROOM MODEL
 // ============================================
 export async function loadRoomModel(glbPath) {
   console.log("[3D] Loading room:", glbPath);
@@ -399,7 +418,7 @@ export async function loadRoomModel(glbPath) {
 
   // Remove existing room
   if (currentRoom) {
-    scene.remove(currentRoom);
+    roomAnchor.remove(currentRoom);
     currentRoom = null;
   }
 
@@ -411,59 +430,53 @@ export async function loadRoomModel(glbPath) {
       (gltf) => {
         const room = gltf.scene;
         
-        // Get room dimensions
+        // Calculate room bounds
         const roomBox = new THREE.Box3().setFromObject(room);
         const roomSize = roomBox.getSize(new THREE.Vector3());
         const roomCenter = roomBox.getCenter(new THREE.Vector3());
         
         console.log("[3D] Room original size:", roomSize);
         
-        // Scale room to reasonable size (about 6 meters wide)
-        const targetWidth = 6;
+        // Scale room to reasonable size (~8 meters wide)
+        const targetWidth = 8;
         const roomScale = targetWidth / Math.max(roomSize.x, roomSize.z);
         room.scale.setScalar(roomScale);
         
         // Recalculate after scaling
         roomBox.setFromObject(room);
-        const scaledSize = roomBox.getSize(new THREE.Vector3());
-        const scaledCenter = roomBox.getCenter(new THREE.Vector3());
         
-        // Position room so floor is at y=0 and centered
+        // Position room: floor at y=0, centered on x/z
+        const scaledCenter = roomBox.getCenter(new THREE.Vector3());
         room.position.set(
           -scaledCenter.x,
-          -roomBox.min.y,  // Floor at y=0
-          -scaledCenter.z - 2  // Push room back a bit
+          -roomBox.min.y,
+          -scaledCenter.z
         );
         
-        // Enable shadows
+        // Enable shadows and double-sided materials
         room.traverse((obj) => {
           if (obj.isMesh) {
             obj.castShadow = true;
             obj.receiveShadow = true;
-            
-            // Make sure materials are visible
             if (obj.material) {
               obj.material.side = THREE.DoubleSide;
             }
           }
         });
 
-        // Hide default ground and sky
-        if (defaultGround) defaultGround.visible = false;
-        if (defaultSky) defaultSky.visible = false;
-
-        scene.add(room);
+        // Add to room anchor
+        roomAnchor.add(room);
         currentRoom = room;
         
-        // Move avatar position for room view
-        avatarPosition = { x: 0, y: 0, z: 0 };
+        // Enable room mode
+        useRoom = true;
         
-        // Reposition avatar if loaded
-        if (currentVRM) {
-          repositionAvatar();
-        }
+        // Hide fallback environment
+        if (fallbackGround) fallbackGround.visible = false;
+        if (fallbackSky) fallbackSky.visible = false;
         
-        // Update camera
+        // Reposition avatar and camera
+        positionAvatarAnchor();
         updateCamera();
 
         if (loadingEl) loadingEl.classList.remove("active");
@@ -474,12 +487,15 @@ export async function loadRoomModel(glbPath) {
       (progress) => {
         if (progress.total > 0) {
           const percent = (progress.loaded / progress.total * 100).toFixed(0);
-          console.log(`[3D] Room loading: ${percent}%`);
+          console.log(`[3D] Room: ${percent}%`);
         }
       },
       (error) => {
-        console.error("[3D] Room load failed:", error);
+        console.error("[3D] Room failed:", error);
         if (loadingEl) loadingEl.classList.remove("active");
+        
+        // Fallback to no-room mode
+        enableFallbackEnvironment();
         reject(error);
       }
     );
@@ -487,61 +503,33 @@ export async function loadRoomModel(glbPath) {
 }
 
 // ============================================
-// REPOSITION AVATAR (when room changes)
-// ============================================
-function repositionAvatar() {
-  if (!currentVRM) return;
-  
-  const vrm = currentVRM;
-  const box = new THREE.Box3().setFromObject(vrm.scene);
-  const center = box.getCenter(new THREE.Vector3());
-  
-  // Get current scale
-  const scale = vrm.scene.scale.x;
-  
-  // Reposition to avatar position
-  vrm.scene.position.set(
-    avatarPosition.x,
-    avatarPosition.y,
-    avatarPosition.z
-  );
-  
-  // Adjust to keep feet on ground
-  const newBox = new THREE.Box3().setFromObject(vrm.scene);
-  vrm.scene.position.y -= newBox.min.y;
-  
-  console.log("[3D] Avatar repositioned to:", avatarPosition);
-}
-
-// ============================================
-// REMOVE ROOM
+// REMOVE ROOM (show fallback)
 // ============================================
 export function removeRoom() {
   if (currentRoom) {
-    scene.remove(currentRoom);
+    roomAnchor.remove(currentRoom);
     currentRoom = null;
   }
   
-  // Show default ground and sky
-  if (defaultGround) defaultGround.visible = true;
-  if (defaultSky) defaultSky.visible = true;
-  
-  // Reset avatar position
-  avatarPosition = { x: 0, y: 0, z: 0 };
-  
-  // Reposition avatar
-  if (currentVRM) {
-    repositionAvatar();
-  }
-  
-  // Update camera
-  updateCamera();
-  
+  enableFallbackEnvironment();
   console.log("[3D] Room removed");
 }
 
 // ============================================
-// CHECK IF ROOM IS LOADED
+// ENABLE FALLBACK ENVIRONMENT
+// ============================================
+function enableFallbackEnvironment() {
+  useRoom = false;
+  
+  if (fallbackGround) fallbackGround.visible = true;
+  if (fallbackSky) fallbackSky.visible = true;
+  
+  positionAvatarAnchor();
+  updateCamera();
+}
+
+// ============================================
+// HAS ROOM
 // ============================================
 export function hasRoom() {
   return currentRoom !== null;
@@ -590,12 +578,6 @@ function setRelaxedPose(vrm) {
       );
     }
 
-    const leftHand = vrm.humanoid.getNormalizedBoneNode("leftHand");
-    const rightHand = vrm.humanoid.getNormalizedBoneNode("rightHand");
-    
-    if (leftHand) leftHand.rotation.set(0, 0, 0.1);
-    if (rightHand) rightHand.rotation.set(0, 0, -0.1);
-
     console.log("[3D] ✅ Relaxed pose set");
   } catch (e) {
     console.warn("[3D] Pose error:", e);
@@ -603,7 +585,7 @@ function setRelaxedPose(vrm) {
 }
 
 // ============================================
-// IDLE ANIMATION
+// IDLE ANIMATIONS
 // ============================================
 function updateIdleAnimation(delta) {
   if (!currentVRM || !avatarReady) return;
@@ -622,22 +604,8 @@ function updateBreathing() {
   const chest = currentVRM.humanoid?.getNormalizedBoneNode("chest");
   const upperChest = currentVRM.humanoid?.getNormalizedBoneNode("upperChest");
   
-  if (upperChest) {
-    upperChest.rotation.x = breathOffset * 1.2;
-  }
-  if (chest) {
-    chest.rotation.x = breathOffset * 0.8;
-  }
-  
-  const leftShoulder = currentVRM.humanoid?.getNormalizedBoneNode("leftShoulder");
-  const rightShoulder = currentVRM.humanoid?.getNormalizedBoneNode("rightShoulder");
-  
-  if (leftShoulder) {
-    leftShoulder.position.y = breathOffset * 0.3;
-  }
-  if (rightShoulder) {
-    rightShoulder.position.y = breathOffset * 0.3;
-  }
+  if (upperChest) upperChest.rotation.x = breathOffset * 1.2;
+  if (chest) chest.rotation.x = breathOffset * 0.8;
 }
 
 function updateHeadMovement(delta) {
@@ -659,11 +627,8 @@ function updateHeadMovement(delta) {
     lookTarget.y *= 0.97;
   }
 
-  const currentY = head.rotation.y || 0;
-  const currentX = head.rotation.x || 0;
-  
-  head.rotation.y += (lookTarget.x - currentY) * 0.04;
-  head.rotation.x += (lookTarget.y - currentX) * 0.04;
+  head.rotation.y += (lookTarget.x - (head.rotation.y || 0)) * 0.04;
+  head.rotation.x += (lookTarget.y - (head.rotation.x || 0)) * 0.04;
 
   if (neck) {
     neck.rotation.y = head.rotation.y * 0.3;
@@ -674,8 +639,6 @@ function updateHeadMovement(delta) {
 function updateArmMovement() {
   const leftUpperArm = currentVRM.humanoid?.getNormalizedBoneNode("leftUpperArm");
   const rightUpperArm = currentVRM.humanoid?.getNormalizedBoneNode("rightUpperArm");
-  const leftLowerArm = currentVRM.humanoid?.getNormalizedBoneNode("leftLowerArm");
-  const rightLowerArm = currentVRM.humanoid?.getNormalizedBoneNode("rightLowerArm");
 
   const armSway = Math.sin(idleTime * CONFIG.armSwaySpeed) * CONFIG.armSwayAmount;
   
@@ -684,13 +647,6 @@ function updateArmMovement() {
   }
   if (rightUpperArm) {
     rightUpperArm.rotation.z = baseRotations.rightUpperArm.z - armSway;
-  }
-
-  if (leftLowerArm) {
-    leftLowerArm.rotation.y = baseRotations.leftLowerArm.y + armSway * 0.5;
-  }
-  if (rightLowerArm) {
-    rightLowerArm.rotation.y = baseRotations.rightLowerArm.y + armSway * 0.5;
   }
 }
 
@@ -708,7 +664,6 @@ function updateGestures(delta) {
 
   if (isGesturing) {
     gestureProgress += delta * 1000;
-    
     const progress = gestureProgress / CONFIG.gestureDuration;
     const eased = Math.sin(progress * Math.PI);
     
@@ -717,7 +672,6 @@ function updateGestures(delta) {
     
     if (rightUpperArm) {
       rightUpperArm.rotation.z = baseRotations.rightUpperArm.z + eased * 0.12;
-      rightUpperArm.rotation.x = baseRotations.rightUpperArm.x - eased * 0.08;
     }
     if (rightLowerArm) {
       rightLowerArm.rotation.y = baseRotations.rightLowerArm.y - eased * 0.15;
@@ -736,12 +690,10 @@ function updateBlinking(delta) {
   if (!currentVRM?.expressionManager) return;
 
   blinkTimer += delta * 1000;
-
   const interval = CONFIG.blinkInterval + Math.random() * 2000;
 
   if (blinkTimer >= interval) {
     const expr = currentVRM.expressionManager;
-    
     expr.setValue("blink", 1.0);
     
     setTimeout(() => {
@@ -770,26 +722,16 @@ function updateBlinking(delta) {
 // ============================================
 // LIP SYNC
 // ============================================
-function updateLipSync(delta) {
+function updateLipSync() {
   if (!currentVRM?.expressionManager) return;
 
   currentMouthOpenness += (targetMouthOpenness - currentMouthOpenness) * CONFIG.lipSyncSmooth;
 
   const expr = currentVRM.expressionManager;
   
-  if (expr.expressionMap["aa"]) {
-    expr.setValue("aa", currentMouthOpenness * 0.8);
-  }
-  if (expr.expressionMap["oh"]) {
-    expr.setValue("oh", currentMouthOpenness * 0.3 * Math.abs(Math.sin(idleTime * 10)));
-  }
-  if (expr.expressionMap["ih"]) {
-    expr.setValue("ih", currentMouthOpenness * 0.2 * Math.abs(Math.cos(idleTime * 12)));
-  }
-
-  if (expr.expressionMap["happy"]) {
-    expr.setValue("happy", currentMouthOpenness * 0.1);
-  }
+  if (expr.expressionMap["aa"]) expr.setValue("aa", currentMouthOpenness * 0.8);
+  if (expr.expressionMap["oh"]) expr.setValue("oh", currentMouthOpenness * 0.3 * Math.abs(Math.sin(idleTime * 10)));
+  if (expr.expressionMap["ih"]) expr.setValue("ih", currentMouthOpenness * 0.2 * Math.abs(Math.cos(idleTime * 12)));
 }
 
 // ============================================
@@ -797,7 +739,6 @@ function updateLipSync(delta) {
 // ============================================
 export function avatarStartTalking() {
   isTalking = true;
-  console.log("[3D] 🗣️ Start talking");
   animateTalking();
 }
 
@@ -810,10 +751,7 @@ export function avatarStopTalking() {
     ["aa", "oh", "ih", "ou", "ee", "a"].forEach(name => {
       if (expr.expressionMap[name]) expr.setValue(name, 0);
     });
-    if (expr.expressionMap["happy"]) expr.setValue("happy", 0);
   }
-  
-  console.log("[3D] 🤐 Stop talking");
 }
 
 function animateTalking() {
@@ -830,28 +768,7 @@ function animateTalking() {
     Math.random() * 0.1;
   
   targetMouthOpenness = Math.max(0.1, Math.min(0.85, 0.35 + variation));
-
   requestAnimationFrame(animateTalking);
-}
-
-// ============================================
-// SET EXPRESSION
-// ============================================
-export function setExpression(name, value = 1.0, duration = 0) {
-  if (!currentVRM?.expressionManager) return;
-  
-  const expr = currentVRM.expressionManager;
-  if (expr.expressionMap[name]) {
-    expr.setValue(name, value);
-    
-    if (duration > 0) {
-      setTimeout(() => {
-        if (currentVRM?.expressionManager) {
-          currentVRM.expressionManager.setValue(name, 0);
-        }
-      }, duration);
-    }
-  }
 }
 
 // ============================================
@@ -865,11 +782,7 @@ function animate() {
   if (currentVRM && avatarReady) {
     updateIdleAnimation(delta);
     updateBlinking(delta);
-    
-    if (isTalking) {
-      updateLipSync(delta);
-    }
-
+    if (isTalking) updateLipSync();
     currentVRM.update(delta);
   }
 
@@ -883,50 +796,34 @@ function animate() {
 // ============================================
 function onResize() {
   if (!container || !camera || !renderer) return;
-
   camera.aspect = container.clientWidth / container.clientHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(container.clientWidth, container.clientHeight);
 }
 
 // ============================================
-// CHANGE SKY COLORS
-// ============================================
-export function setSkyColors(topColor, bottomColor) {
-  if (defaultSky && defaultSky.material.uniforms) {
-    defaultSky.material.uniforms.topColor.value.setHex(topColor);
-    defaultSky.material.uniforms.bottomColor.value.setHex(bottomColor);
-  }
-}
-
-// ============================================
 // CLEANUP
 // ============================================
 export function dispose3D() {
-  console.log("[3D] Disposing...");
-
-  if (rafId) {
-    cancelAnimationFrame(rafId);
-    rafId = null;
-  }
-
+  if (rafId) cancelAnimationFrame(rafId);
+  
   if (currentVRM) {
-    scene.remove(currentVRM.scene);
+    avatarAnchor?.remove(currentVRM.scene);
     VRMUtils.deepDispose(currentVRM.scene);
     currentVRM = null;
   }
-
+  
   if (currentRoom) {
-    scene.remove(currentRoom);
+    roomAnchor?.remove(currentRoom);
     currentRoom = null;
   }
-
+  
   if (renderer) {
     renderer.dispose();
     renderer.domElement.remove();
     renderer = null;
   }
-
+  
   window.removeEventListener("resize", onResize);
   avatarReady = false;
 }
@@ -934,43 +831,23 @@ export function dispose3D() {
 // ============================================
 // EXPORTS
 // ============================================
-export function isAvatarReady() {
-  return avatarReady;
-}
+export function isAvatarReady() { return avatarReady; }
+export function getVRM() { return currentVRM; }
+export function getScene() { return scene; }
+export function isRoomMode() { return useRoom; }
 
-export function getVRM() {
-  return currentVRM;
-}
-
-export function getScene() {
-  return scene;
-}
-
-// Add prop function
-export async function addProp(glbPath, position = {x: 0, y: 0, z: 0}, scale = 1) {
-  return new Promise((resolve, reject) => {
-    const loader = new GLTFLoader();
-
-    loader.load(
-      glbPath,
-      (gltf) => {
-        const prop = gltf.scene;
-        prop.position.set(position.x, position.y, position.z);
-        prop.scale.setScalar(scale);
-        
-        prop.traverse((obj) => {
-          if (obj.isMesh) {
-            obj.castShadow = true;
-            obj.receiveShadow = true;
-          }
-        });
-
-        scene.add(prop);
-        console.log("[3D] ✅ Prop added:", glbPath);
-        resolve(prop);
-      },
-      undefined,
-      reject
-    );
-  });
+// For toggling room on/off from UI
+export function setRoomMode(enabled) {
+  useRoom = enabled;
+  
+  if (enabled && currentRoom) {
+    if (fallbackGround) fallbackGround.visible = false;
+    if (fallbackSky) fallbackSky.visible = false;
+  } else {
+    if (fallbackGround) fallbackGround.visible = true;
+    if (fallbackSky) fallbackSky.visible = true;
+  }
+  
+  positionAvatarAnchor();
+  updateCamera();
 }
