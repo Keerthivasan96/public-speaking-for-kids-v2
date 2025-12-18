@@ -1,7 +1,7 @@
 {
-  "name": "english-learning-companion",
+  "name": "frontend",
+  "version": "1.0.0",
   "private": true,
-  "version": "2.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,10 +9,11 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "three": "^0.160.0",
-    "@pixiv/three-vrm": "^2.1.0"
+    "three": "^0.164.1",
+    "@pixiv/three-vrm": "^2.1.3",
+    "three-stdlib": "^2.16.0"
   },
   "devDependencies": {
-    "vite": "^5.0.0"
+    "vite": "^5.4.21"
   }
 }
