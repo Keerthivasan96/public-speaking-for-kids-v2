@@ -64,10 +64,10 @@ const CONFIG = {
   avatarHeight: 1.55,
   
   // Camera - positioned to see avatar with room as background
-  cameraDistance: 1.8,
-  cameraHeight: 1.4,
-  cameraLookAtY: 1.25,
-  cameraFOV: 35,
+  cameraDistance: 2.2,
+  cameraHeight: 1.15,
+  cameraLookAtY: 1.35,
+  cameraFOV: 40,
   
   // Avatar position - in FRONT of room furniture
   avatarX: 0,
@@ -76,7 +76,7 @@ const CONFIG = {
   
   // Room settings
   roomScale: 0.38,
-  roomZ: -4.5,
+  roomZ: -4.8,
   
   // Fallback sky colors
   skyTopColor: 0x87CEEB,
