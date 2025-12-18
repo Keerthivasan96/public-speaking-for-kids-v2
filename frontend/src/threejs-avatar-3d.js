@@ -63,9 +63,9 @@ const CONFIG = {
   cameraAngleX: 0.08,       // Subtle downward angle
   
   // Room camera (when 3D room loaded)
-  roomCameraDistance: 2.8,
-  roomCameraHeight: 1.4,
-  roomCameraLookAtY: 1.2,
+  roomCameraDistance: 12.8,
+  roomCameraHeight: 11.4,
+  roomCameraLookAtY: 11.2,
   roomCameraOffsetX: 0.3,   // Slight side angle
   
   // Ground
