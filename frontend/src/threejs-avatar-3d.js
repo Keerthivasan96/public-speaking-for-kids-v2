@@ -1,6 +1,6 @@
 // ============================================
-// threejs-avatar-3d.js - FIXED ROOM VERSION
-// Natural animations + Proper room integration
+// threejs-avatar-3d.js - FIXED VERSION
+// Natural animations + Room support
 // ============================================
 
 import * as THREE from "three";
@@ -51,11 +51,11 @@ const CONFIG = {
   // Avatar
   avatarScale: 0.9,
   
-  // Camera - ADJUSTED FOR ROOM
-  cameraDistance: 2.5,      // Closer for room view
-  cameraHeight: 1.2,        // Eye level
-  cameraFOV: 45,            // Wider FOV for room
-  cameraLookAtY: 1.0,       // Look at upper body/face
+  // Camera
+  cameraDistance: 3.2,
+  cameraHeight: 1.0,
+  cameraFOV: 32,
+  cameraLookAtY: 0.85,
   
   // Ground
   groundSize: 30,
@@ -64,21 +64,21 @@ const CONFIG = {
   skyTopColor: 0x87CEEB,
   skyBottomColor: 0xE6B3CC,
   
-  // Breathing - SUBTLE
+  // Breathing - SUBTLE (chest only, no body movement)
   breathingSpeed: 0.5,
   breathingAmount: 0.005,
   
-  // HEAD looking around
+  // HEAD ONLY looking around (no body sway)
   lookAroundInterval: 5000,
   lookAroundDuration: 2500,
-  lookAmountX: 0.1,
-  lookAmountY: 0.05,
+  lookAmountX: 0.1,   // Left/right
+  lookAmountY: 0.05,  // Up/down
   
-  // Arm micro-movement
+  // Arm micro-movement - VERY SUBTLE
   armSwayAmount: 0.008,
   armSwaySpeed: 0.3,
   
-  // Gesture
+  // Gesture (occasional)
   gestureInterval: 10000,
   gestureDuration: 1500,
   
@@ -89,10 +89,6 @@ const CONFIG = {
   
   // Lip sync
   lipSyncSmooth: 0.15,
-  
-  // ROOM SETTINGS
-  roomAvatarY: 0,           // Avatar Y position in room
-  roomCameraAngle: 0.05,    // Slight upward angle
 };
 
 // ============================================
@@ -304,12 +300,9 @@ export async function loadVRMAvatar(vrmPath) {
         const scale = targetHeight / size.y;
         vrm.scene.scale.setScalar(scale);
 
-        // FIXED: Position avatar correctly (on ground or room floor)
-        const avatarY = currentRoom ? CONFIG.roomAvatarY : -box.min.y * scale;
-        
         vrm.scene.position.set(
           -center.x * scale,
-          avatarY,
+          -box.min.y * scale,
           -center.z * scale
         );
 
@@ -324,6 +317,7 @@ export async function loadVRMAvatar(vrmPath) {
         currentVRM = vrm;
         avatarReady = true;
 
+        // Reset timers
         idleTime = 0;
         blinkTimer = 0;
         gestureTimer = 0;
@@ -334,7 +328,7 @@ export async function loadVRMAvatar(vrmPath) {
 
         if (loadingEl) loadingEl.classList.remove("active");
 
-        console.log("[3D] ✅ VRM loaded at Y:", avatarY);
+        console.log("[3D] ✅ VRM loaded!");
         
         if (vrm.expressionManager) {
           console.log("[3D] Expressions:", Object.keys(vrm.expressionManager.expressionMap));
@@ -356,7 +350,7 @@ export async function loadVRMAvatar(vrmPath) {
 }
 
 // ============================================
-// LOAD ROOM MODEL - FIXED
+// LOAD ROOM MODEL
 // ============================================
 export async function loadRoomModel(glbPath) {
   console.log("[3D] Loading room:", glbPath);
@@ -378,35 +372,13 @@ export async function loadRoomModel(glbPath) {
       (gltf) => {
         const room = gltf.scene;
         
-        // Enable shadows
+        // Enable shadows on all meshes
         room.traverse((obj) => {
           if (obj.isMesh) {
             obj.castShadow = true;
             obj.receiveShadow = true;
-            
-            // Enhance materials
-            if (obj.material) {
-              obj.material.needsUpdate = true;
-            }
           }
         });
-
-        // FIXED: Position room correctly
-        // Calculate room bounds
-        const box = new THREE.Box3().setFromObject(room);
-        const size = box.getSize(new THREE.Vector3());
-        const center = box.getCenter(new THREE.Vector3());
-        
-        console.log("[3D] Room size:", size);
-        console.log("[3D] Room center:", center);
-        console.log("[3D] Room min Y:", box.min.y);
-
-        // Center room horizontally and depth-wise, set floor to Y=0
-        room.position.set(
-          -center.x,
-          -box.min.y,  // Align room floor to Y=0
-          -center.z
-        );
 
         // Hide default ground and sky
         if (defaultGround) defaultGround.visible = false;
@@ -415,22 +387,9 @@ export async function loadRoomModel(glbPath) {
         scene.add(room);
         currentRoom = room;
 
-        // FIXED: Adjust camera for room
-        camera.position.set(0, CONFIG.cameraHeight, CONFIG.cameraDistance);
-        camera.lookAt(0, CONFIG.cameraLookAtY, 0);
-        
-        // Add slight upward angle
-        camera.rotation.x = CONFIG.roomCameraAngle;
-
-        // Reposition avatar if already loaded
-        if (currentVRM) {
-          currentVRM.scene.position.y = CONFIG.roomAvatarY;
-          console.log("[3D] Avatar repositioned to Y:", CONFIG.roomAvatarY);
-        }
-
         if (loadingEl) loadingEl.classList.remove("active");
 
-        console.log("[3D] ✅ Room loaded and positioned!");
+        console.log("[3D] ✅ Room loaded!");
         resolve(room);
       },
       (progress) => {
@@ -447,7 +406,7 @@ export async function loadRoomModel(glbPath) {
 }
 
 // ============================================
-// REMOVE ROOM - FIXED
+// REMOVE ROOM
 // ============================================
 export function removeRoom() {
   if (currentRoom) {
@@ -459,20 +418,7 @@ export function removeRoom() {
   if (defaultGround) defaultGround.visible = true;
   if (defaultSky) defaultSky.visible = true;
   
-  // FIXED: Reset camera to default position
-  camera.position.set(0, 1.0, 3.2);
-  camera.lookAt(0, 0.85, 0);
-  camera.rotation.x = 0;
-  
-  // Reposition avatar to default ground
-  if (currentVRM) {
-    const box = new THREE.Box3().setFromObject(currentVRM.scene);
-    const scale = currentVRM.scene.scale.x;
-    currentVRM.scene.position.y = -box.min.y * scale;
-    console.log("[3D] Avatar repositioned to ground");
-  }
-  
-  console.log("[3D] Room removed, back to default");
+  console.log("[3D] Room removed");
 }
 
 // ============================================
@@ -571,21 +517,28 @@ function setRelaxedPose(vrm) {
 }
 
 // ============================================
-// IDLE ANIMATION
+// IDLE ANIMATION - FIXED (NO BODY SWAY)
 // ============================================
 function updateIdleAnimation(delta) {
   if (!currentVRM || !avatarReady) return;
 
   idleTime += delta;
 
+  // === BREATHING (chest only - NO hips/spine sway) ===
   updateBreathing();
+
+  // === HEAD LOOK (natural, occasional) ===
   updateHeadMovement(delta);
+
+  // === ARM MICRO-MOVEMENT (very subtle) ===
   updateArmMovement();
+
+  // === OCCASIONAL GESTURES ===
   updateGestures(delta);
 }
 
 // ============================================
-// BREATHING
+// BREATHING - Chest only, no body movement
 // ============================================
 function updateBreathing() {
   const breathOffset = Math.sin(idleTime * CONFIG.breathingSpeed * Math.PI * 2) * CONFIG.breathingAmount;
@@ -593,6 +546,7 @@ function updateBreathing() {
   const chest = currentVRM.humanoid?.getNormalizedBoneNode("chest");
   const upperChest = currentVRM.humanoid?.getNormalizedBoneNode("upperChest");
   
+  // Only animate chest - NO spine or hips
   if (upperChest) {
     upperChest.rotation.x = breathOffset * 1.2;
   }
@@ -600,6 +554,7 @@ function updateBreathing() {
     chest.rotation.x = breathOffset * 0.8;
   }
   
+  // Subtle shoulder movement with breath
   const leftShoulder = currentVRM.humanoid?.getNormalizedBoneNode("leftShoulder");
   const rightShoulder = currentVRM.humanoid?.getNormalizedBoneNode("rightShoulder");
   
@@ -612,7 +567,7 @@ function updateBreathing() {
 }
 
 // ============================================
-// HEAD MOVEMENT
+// HEAD MOVEMENT - Natural looking around
 // ============================================
 function updateHeadMovement(delta) {
   const head = currentVRM.humanoid?.getNormalizedBoneNode("head");
@@ -622,23 +577,28 @@ function updateHeadMovement(delta) {
 
   lookTimer += delta * 1000;
 
+  // Decide to look somewhere new occasionally
   if (lookTimer > CONFIG.lookAroundInterval + Math.random() * 2000) {
+    // Pick new look target
     lookTarget.x = (Math.random() - 0.5) * 2 * CONFIG.lookAmountX;
     lookTarget.y = (Math.random() - 0.5) * 2 * CONFIG.lookAmountY;
     lookTimer = 0;
   }
 
+  // Return to center after looking
   if (lookTimer > CONFIG.lookAroundDuration && lookTimer < CONFIG.lookAroundInterval) {
     lookTarget.x *= 0.97;
     lookTarget.y *= 0.97;
   }
 
+  // Smooth interpolation to target
   const currentY = head.rotation.y || 0;
   const currentX = head.rotation.x || 0;
   
   head.rotation.y += (lookTarget.x - currentY) * 0.04;
   head.rotation.x += (lookTarget.y - currentX) * 0.04;
 
+  // Neck follows head slightly
   if (neck) {
     neck.rotation.y = head.rotation.y * 0.3;
     neck.rotation.x = head.rotation.x * 0.2;
@@ -646,7 +606,7 @@ function updateHeadMovement(delta) {
 }
 
 // ============================================
-// ARM MOVEMENT
+// ARM MOVEMENT - Very subtle
 // ============================================
 function updateArmMovement() {
   const leftUpperArm = currentVRM.humanoid?.getNormalizedBoneNode("leftUpperArm");
@@ -654,6 +614,7 @@ function updateArmMovement() {
   const leftLowerArm = currentVRM.humanoid?.getNormalizedBoneNode("leftLowerArm");
   const rightLowerArm = currentVRM.humanoid?.getNormalizedBoneNode("rightLowerArm");
 
+  // Very subtle arm micro-sway
   const armSway = Math.sin(idleTime * CONFIG.armSwaySpeed) * CONFIG.armSwayAmount;
   
   if (leftUpperArm) {
@@ -663,6 +624,7 @@ function updateArmMovement() {
     rightUpperArm.rotation.z = baseRotations.rightUpperArm.z - armSway;
   }
 
+  // Lower arms tiny movement
   if (leftLowerArm) {
     leftLowerArm.rotation.y = baseRotations.leftLowerArm.y + armSway * 0.5;
   }
@@ -672,7 +634,7 @@ function updateArmMovement() {
 }
 
 // ============================================
-// GESTURES
+// OCCASIONAL GESTURES
 // ============================================
 let isGesturing = false;
 let gestureProgress = 0;
@@ -680,6 +642,7 @@ let gestureProgress = 0;
 function updateGestures(delta) {
   gestureTimer += delta * 1000;
 
+  // Start gesture occasionally
   if (!isGesturing && gestureTimer > CONFIG.gestureInterval + Math.random() * 5000) {
     isGesturing = true;
     gestureProgress = 0;
@@ -690,8 +653,9 @@ function updateGestures(delta) {
     gestureProgress += delta * 1000;
     
     const progress = gestureProgress / CONFIG.gestureDuration;
-    const eased = Math.sin(progress * Math.PI);
+    const eased = Math.sin(progress * Math.PI); // Smooth in-out
     
+    // Simple hand raise gesture
     const rightUpperArm = currentVRM.humanoid?.getNormalizedBoneNode("rightUpperArm");
     const rightLowerArm = currentVRM.humanoid?.getNormalizedBoneNode("rightLowerArm");
     
@@ -722,12 +686,14 @@ function updateBlinking(delta) {
   if (blinkTimer >= interval) {
     const expr = currentVRM.expressionManager;
     
+    // Single blink
     expr.setValue("blink", 1.0);
     
     setTimeout(() => {
       if (currentVRM?.expressionManager) {
         currentVRM.expressionManager.setValue("blink", 0.0);
         
+        // Chance of double blink
         if (Math.random() < CONFIG.doubleBinkChance) {
           setTimeout(() => {
             if (currentVRM?.expressionManager) {
@@ -757,6 +723,7 @@ function updateLipSync(delta) {
 
   const expr = currentVRM.expressionManager;
   
+  // Mouth shapes
   if (expr.expressionMap["aa"]) {
     expr.setValue("aa", currentMouthOpenness * 0.8);
   }
@@ -767,6 +734,7 @@ function updateLipSync(delta) {
     expr.setValue("ih", currentMouthOpenness * 0.2 * Math.abs(Math.cos(idleTime * 12)));
   }
 
+  // Slight eyebrow movement when talking
   if (expr.expressionMap["happy"]) {
     expr.setValue("happy", currentMouthOpenness * 0.1);
   }
@@ -860,3 +828,68 @@ function animate() {
 
 // ============================================
 // RESIZE
+// ============================================
+function onResize() {
+  if (!container || !camera || !renderer) return;
+
+  camera.aspect = container.clientWidth / container.clientHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(container.clientWidth, container.clientHeight);
+}
+
+// ============================================
+// CHANGE SKY COLORS
+// ============================================
+export function setSkyColors(topColor, bottomColor) {
+  if (defaultSky && defaultSky.material.uniforms) {
+    defaultSky.material.uniforms.topColor.value.setHex(topColor);
+    defaultSky.material.uniforms.bottomColor.value.setHex(bottomColor);
+  }
+}
+
+// ============================================
+// CLEANUP
+// ============================================
+export function dispose3D() {
+  console.log("[3D] Disposing...");
+
+  if (rafId) {
+    cancelAnimationFrame(rafId);
+    rafId = null;
+  }
+
+  if (currentVRM) {
+    scene.remove(currentVRM.scene);
+    VRMUtils.deepDispose(currentVRM.scene);
+    currentVRM = null;
+  }
+
+  if (currentRoom) {
+    scene.remove(currentRoom);
+    currentRoom = null;
+  }
+
+  if (renderer) {
+    renderer.dispose();
+    renderer.domElement.remove();
+    renderer = null;
+  }
+
+  window.removeEventListener("resize", onResize);
+  avatarReady = false;
+}
+
+// ============================================
+// EXPORTS
+// ============================================
+export function isAvatarReady() {
+  return avatarReady;
+}
+
+export function getVRM() {
+  return currentVRM;
+}
+
+export function getScene() {
+  return scene;
+}
