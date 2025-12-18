@@ -1,8 +1,8 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>English Learning Companion ✨</title>
   
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -12,19 +12,25 @@
   
   <div class="immersive-container">
     
-    <!-- 3D Avatar -->
+    <!-- 3D Avatar Container -->
     <div id="canvas-container" aria-label="Your English Companion">
       <div id="avatar-scroll-safe"></div>
+      
+      <!-- Loading Indicator -->
+      <div id="loading-indicator" class="loading-indicator">
+        <div class="loading-spinner"></div>
+        <span>Loading avatar...</span>
+      </div>
     </div>
 
     <!-- Mic Button (bottom-left) -->
-    <div id="mic-container" aria-hidden="false">
+    <div id="mic-container">
       <button id="micBtn" class="mic-small" title="Start conversation">
         🎤
       </button>
     </div>
 
-    <!-- AI Reply Caption (bottom center - minimalist) -->
+    <!-- AI Reply Caption (bottom center) -->
     <div id="chatCaption" class="chat-caption" role="status" aria-live="polite">
       Ready to chat! 💭
     </div>
@@ -45,7 +51,30 @@
       </div>
       
       <div class="menu-content">
-        <!-- Mode Toggle -->
+        
+        <!-- Avatar Selection -->
+        <div class="menu-item">
+          <label>Choose Avatar</label>
+          <div class="avatar-grid">
+            <button class="avatar-option active" data-avatar="/assets/vrmavatar1.vrm" title="Avatar 1">
+              <span class="avatar-emoji">👧</span>
+            </button>
+            <button class="avatar-option" data-avatar="/assets/vrmavatar2.vrm" title="Avatar 2">
+              <span class="avatar-emoji">👩</span>
+            </button>
+            <button class="avatar-option" data-avatar="/assets/vrmavatar3.vrm" title="Avatar 3">
+              <span class="avatar-emoji">👱‍♀️</span>
+            </button>
+            <button class="avatar-option" data-avatar="/assets/vrmavatar4.vrm" title="Avatar 4">
+              <span class="avatar-emoji">🧑</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Divider -->
+        <div class="menu-divider"></div>
+
+        <!-- Conversation Mode Toggle -->
         <div class="menu-item">
           <label>Conversation Mode</label>
           <button id="modeToggle" class="mode-toggle-btn">
@@ -55,11 +84,14 @@
           <p class="menu-hint">Casual = friendly chat • Practice = grammar help</p>
         </div>
 
-        <!-- Practice Mode Corrections (Only visible in Practice Mode) -->
+        <!-- Practice Mode Corrections -->
         <div id="correctionDisplay" class="menu-item" style="display: none;">
           <label>Latest Correction</label>
           <div id="correctionContent" class="correction-display"></div>
         </div>
+
+        <!-- Divider -->
+        <div class="menu-divider"></div>
 
         <!-- Actions -->
         <div class="menu-item">
@@ -87,8 +119,11 @@
 
   </div>
 
+  <!-- External Libraries -->
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
+  
+  <!-- Main App -->
   <script type="module" src="/src/app.js"></script>
 </body>
 </html>
