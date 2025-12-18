@@ -1,7 +1,7 @@
 // ============================================
-// threejs-avatar-3d.js
+// threejs-avatar-3d.js - FIXED VERSION
 // LOCATION: frontend/src/threejs-avatar-3d.js
-// ACTION: CREATE NEW FILE
+// ACTION: REPLACE YOUR EXISTING FILE
 // ============================================
 
 import * as THREE from "three";
@@ -27,38 +27,45 @@ let blinkTimer = 0;
 let currentMouthOpenness = 0;
 let targetMouthOpenness = 0;
 
+// Store base arm rotations for idle animation
+let baseArmRotations = {
+  leftUpperArm: { x: 0, y: 0, z: 1.1 },
+  rightUpperArm: { x: 0, y: 0, z: -1.1 }
+};
+
 // ============================================
-// SETTINGS - CHANGE THESE TO CUSTOMIZE
+// SETTINGS - ADJUSTED FOR BETTER VIEW
 // ============================================
 const CONFIG = {
-  // Avatar
-  avatarScale: 1.0,
-  avatarYOffset: -0.85,
+  // Avatar - ADJUSTED
+  avatarScale: 0.9,
+  avatarYOffset: 0,
   
-  // Camera
-  cameraDistance: 2.5,
-  cameraHeight: 1.2,
-  cameraFOV: 35,
+  // Camera - LOWERED & PULLED BACK
+  cameraDistance: 3.5,
+  cameraHeight: 0.9,
+  cameraFOV: 30,
+  cameraLookAtY: 0.8,
   
   // Ground
-  groundSize: 20,
+  groundSize: 30,
   
-  // Sky colors (Replika-style pink/blue)
+  // Sky colors
   skyTopColor: 0x87CEEB,
   skyBottomColor: 0xE6B3CC,
   
   // Idle animation
   breathingSpeed: 0.8,
-  breathingAmount: 0.003,
+  breathingAmount: 0.005,
   swaySpeed: 0.3,
-  swayAmount: 0.01,
+  swayAmount: 0.008,
   
   // Blinking
-  blinkInterval: 3000,
+  blinkInterval: 3500,
   blinkDuration: 150,
   
-  // Lip sync smoothness
-  lipSyncSmooth: 0.15,
+  // Lip sync
+  lipSyncSmooth: 0.12,
 };
 
 // ============================================
@@ -71,14 +78,12 @@ export function init3DScene(containerId = "canvas-container") {
     return false;
   }
 
-  // Cleanup old stuff
   if (rafId) {
     cancelAnimationFrame(rafId);
     rafId = null;
   }
   container.querySelectorAll("canvas").forEach(c => c.remove());
 
-  // Create renderer
   renderer = new THREE.WebGLRenderer({ 
     antialias: true, 
     alpha: false 
@@ -93,16 +98,11 @@ export function init3DScene(containerId = "canvas-container") {
   
   container.appendChild(renderer.domElement);
 
-  // Create scene
   scene = new THREE.Scene();
   
-  // Add sky
   createSky();
-  
-  // Add ground
   createGround();
   
-  // Setup camera
   camera = new THREE.PerspectiveCamera(
     CONFIG.cameraFOV,
     container.clientWidth / container.clientHeight,
@@ -110,15 +110,12 @@ export function init3DScene(containerId = "canvas-container") {
     100
   );
   camera.position.set(0, CONFIG.cameraHeight, CONFIG.cameraDistance);
-  camera.lookAt(0, 1.0, 0);
+  camera.lookAt(0, CONFIG.cameraLookAtY, 0);
 
-  // Add lights
   setupLights();
 
-  // Handle resize
   window.addEventListener("resize", onResize, { passive: true });
 
-  // Start animation loop
   animate();
 
   console.log("[3D] ✅ Scene initialized");
@@ -126,7 +123,7 @@ export function init3DScene(containerId = "canvas-container") {
 }
 
 // ============================================
-// CREATE SKY (Gradient Background)
+// CREATE SKY
 // ============================================
 function createSky() {
   const skyGeo = new THREE.SphereGeometry(50, 32, 32);
@@ -165,7 +162,7 @@ function createSky() {
 }
 
 // ============================================
-// CREATE GROUND (Gradient Floor)
+// CREATE GROUND
 // ============================================
 function createGround() {
   const groundGeo = new THREE.PlaneGeometry(CONFIG.groundSize, CONFIG.groundSize);
@@ -205,7 +202,6 @@ function createGround() {
 // SETUP LIGHTING
 // ============================================
 function setupLights() {
-  // Main light (sun)
   const mainLight = new THREE.DirectionalLight(0xffffff, 1.2);
   mainLight.position.set(3, 5, 3);
   mainLight.castShadow = true;
@@ -219,21 +215,17 @@ function setupLights() {
   mainLight.shadow.camera.bottom = -5;
   scene.add(mainLight);
 
-  // Fill light
   const fillLight = new THREE.DirectionalLight(0xffeedd, 0.5);
   fillLight.position.set(-2, 3, -1);
   scene.add(fillLight);
 
-  // Back light
   const backLight = new THREE.DirectionalLight(0xaaccff, 0.4);
   backLight.position.set(0, 2, -3);
   scene.add(backLight);
 
-  // Hemisphere light
   const hemiLight = new THREE.HemisphereLight(0x87CEEB, 0x8B7355, 0.6);
   scene.add(hemiLight);
 
-  // Ambient
   const ambient = new THREE.AmbientLight(0xffffff, 0.3);
   scene.add(ambient);
 }
@@ -244,11 +236,9 @@ function setupLights() {
 export async function loadVRMAvatar(vrmPath) {
   console.log("[3D] Loading VRM:", vrmPath);
 
-  // Show loading
   const loadingEl = document.getElementById("loading-indicator");
   if (loadingEl) loadingEl.classList.add("active");
 
-  // Remove old avatar
   if (currentVRM) {
     scene.remove(currentVRM.scene);
     VRMUtils.deepDispose(currentVRM.scene);
@@ -272,16 +262,30 @@ export async function loadVRMAvatar(vrmPath) {
           return;
         }
 
-        // Cleanup
         VRMUtils.removeUnnecessaryVertices(gltf.scene);
         VRMUtils.removeUnnecessaryJoints(gltf.scene);
 
-        // Face camera (VRM faces +Z by default)
+        // Face camera
         vrm.scene.rotation.y = Math.PI;
 
-        // Scale and position
-        vrm.scene.scale.setScalar(CONFIG.avatarScale);
-        vrm.scene.position.set(0, CONFIG.avatarYOffset, 0);
+        // Calculate bounding box
+        const box = new THREE.Box3().setFromObject(vrm.scene);
+        const size = box.getSize(new THREE.Vector3());
+        const center = box.getCenter(new THREE.Vector3());
+        
+        console.log("[3D] Avatar size:", size);
+
+        // Scale to fit (target height ~1.6m)
+        const targetHeight = 1.6;
+        const scale = targetHeight / size.y;
+        vrm.scene.scale.setScalar(scale);
+
+        // Position: center X/Z, feet on ground
+        vrm.scene.position.set(
+          -center.x * scale,
+          -box.min.y * scale,
+          -center.z * scale
+        );
 
         // Enable shadows
         vrm.scene.traverse((obj) => {
@@ -291,21 +295,20 @@ export async function loadVRMAvatar(vrmPath) {
           }
         });
 
-        // Add to scene
         scene.add(vrm.scene);
         currentVRM = vrm;
         avatarReady = true;
 
-        // Reset timers
         idleTime = 0;
         blinkTimer = 0;
 
-        // Hide loading
+        // Set relaxed pose (arms down)
+        setRelaxedPose(vrm);
+
         if (loadingEl) loadingEl.classList.remove("active");
 
         console.log("[3D] ✅ VRM loaded!");
         
-        // Log available expressions
         if (vrm.expressionManager) {
           console.log("[3D] Expressions:", Object.keys(vrm.expressionManager.expressionMap));
         }
@@ -326,7 +329,55 @@ export async function loadVRMAvatar(vrmPath) {
 }
 
 // ============================================
-// IDLE ANIMATION (Breathing, Sway)
+// SET RELAXED POSE (Arms Down)
+// ============================================
+function setRelaxedPose(vrm) {
+  if (!vrm?.humanoid) return;
+
+  try {
+    // Upper arms - rotate down from T-pose
+    const leftUpperArm = vrm.humanoid.getNormalizedBoneNode("leftUpperArm");
+    const rightUpperArm = vrm.humanoid.getNormalizedBoneNode("rightUpperArm");
+    
+    if (leftUpperArm) {
+      leftUpperArm.rotation.set(0.2, 0, 1.1);
+      baseArmRotations.leftUpperArm = { x: 0.2, y: 0, z: 1.1 };
+    }
+    if (rightUpperArm) {
+      rightUpperArm.rotation.set(0.2, 0, -1.1);
+      baseArmRotations.rightUpperArm = { x: 0.2, y: 0, z: -1.1 };
+    }
+
+    // Lower arms - slight bend
+    const leftLowerArm = vrm.humanoid.getNormalizedBoneNode("leftLowerArm");
+    const rightLowerArm = vrm.humanoid.getNormalizedBoneNode("rightLowerArm");
+    
+    if (leftLowerArm) {
+      leftLowerArm.rotation.set(0, -0.3, 0);
+    }
+    if (rightLowerArm) {
+      rightLowerArm.rotation.set(0, 0.3, 0);
+    }
+
+    // Hands - natural angle
+    const leftHand = vrm.humanoid.getNormalizedBoneNode("leftHand");
+    const rightHand = vrm.humanoid.getNormalizedBoneNode("rightHand");
+    
+    if (leftHand) {
+      leftHand.rotation.set(0, 0, 0.15);
+    }
+    if (rightHand) {
+      rightHand.rotation.set(0, 0, -0.15);
+    }
+
+    console.log("[3D] ✅ Relaxed pose set");
+  } catch (e) {
+    console.warn("[3D] Could not set pose:", e);
+  }
+}
+
+// ============================================
+// IDLE ANIMATION
 // ============================================
 function updateIdleAnimation(delta) {
   if (!currentVRM || !avatarReady) return;
@@ -345,18 +396,32 @@ function updateIdleAnimation(delta) {
     spine.rotation.x = breathOffset;
   }
 
-  // Subtle sway
+  // Body sway
   const swayX = Math.sin(idleTime * CONFIG.swaySpeed) * CONFIG.swayAmount;
+  const swayZ = Math.cos(idleTime * CONFIG.swaySpeed * 0.7) * CONFIG.swayAmount * 0.5;
   
-  if (currentVRM.scene) {
-    currentVRM.scene.rotation.z = swayX * 0.5;
+  const hips = currentVRM.humanoid?.getNormalizedBoneNode("hips");
+  if (hips) {
+    hips.rotation.z = swayX;
+    hips.rotation.x = swayZ;
   }
 
-  // Head micro-movement
+  // Head movement
   const head = currentVRM.humanoid?.getNormalizedBoneNode("head");
   if (head) {
-    head.rotation.y = Math.sin(idleTime * 0.5) * 0.02;
-    head.rotation.x = Math.sin(idleTime * 0.3) * 0.01;
+    head.rotation.y = Math.sin(idleTime * 0.5) * 0.03;
+    head.rotation.x = Math.sin(idleTime * 0.3) * 0.02;
+  }
+
+  // Subtle arm movement
+  const leftUpperArm = currentVRM.humanoid?.getNormalizedBoneNode("leftUpperArm");
+  const rightUpperArm = currentVRM.humanoid?.getNormalizedBoneNode("rightUpperArm");
+  
+  if (leftUpperArm) {
+    leftUpperArm.rotation.z = baseArmRotations.leftUpperArm.z + Math.sin(idleTime * 0.4) * 0.02;
+  }
+  if (rightUpperArm) {
+    rightUpperArm.rotation.z = baseArmRotations.rightUpperArm.z + Math.sin(idleTime * 0.4 + 0.5) * 0.02;
   }
 }
 
@@ -368,10 +433,9 @@ function updateBlinking(delta) {
 
   blinkTimer += delta * 1000;
 
-  const interval = CONFIG.blinkInterval + Math.random() * 1000;
+  const interval = CONFIG.blinkInterval + Math.random() * 1500;
 
   if (blinkTimer >= interval) {
-    // Blink
     const expr = currentVRM.expressionManager;
     expr.setValue("blink", 1.0);
     
@@ -391,23 +455,28 @@ function updateBlinking(delta) {
 function updateLipSync(delta) {
   if (!currentVRM?.expressionManager) return;
 
-  // Smooth interpolation
   currentMouthOpenness += (targetMouthOpenness - currentMouthOpenness) * CONFIG.lipSyncSmooth;
 
   const expr = currentVRM.expressionManager;
   
-  // Try different mouth expressions
+  // Primary mouth shape
   if (expr.expressionMap["aa"]) {
     expr.setValue("aa", currentMouthOpenness);
   } else if (expr.expressionMap["a"]) {
     expr.setValue("a", currentMouthOpenness);
-  } else if (expr.expressionMap["oh"]) {
-    expr.setValue("oh", currentMouthOpenness);
+  }
+  
+  // Secondary shapes for variation
+  if (expr.expressionMap["oh"]) {
+    expr.setValue("oh", currentMouthOpenness * 0.3);
+  }
+  if (expr.expressionMap["ih"]) {
+    expr.setValue("ih", currentMouthOpenness * 0.2 * Math.abs(Math.sin(idleTime * 15)));
   }
 }
 
 // ============================================
-// TALKING CONTROL (called from app.js)
+// TALKING CONTROL
 // ============================================
 export function avatarStartTalking() {
   isTalking = true;
@@ -418,6 +487,15 @@ export function avatarStartTalking() {
 export function avatarStopTalking() {
   isTalking = false;
   targetMouthOpenness = 0;
+  
+  // Reset expressions
+  if (currentVRM?.expressionManager) {
+    const expr = currentVRM.expressionManager;
+    ["aa", "a", "oh", "ih", "ou", "ee"].forEach(name => {
+      if (expr.expressionMap[name]) expr.setValue(name, 0);
+    });
+  }
+  
   console.log("[3D] 🤐 Stop talking");
 }
 
@@ -427,12 +505,14 @@ function animateTalking() {
     return;
   }
 
-  // Simulate mouth movement
-  const variation = Math.sin(Date.now() * 0.015) * 0.3 + 
-                    Math.sin(Date.now() * 0.025) * 0.2 +
-                    Math.random() * 0.2;
+  const time = Date.now() * 0.001;
+  const variation = 
+    Math.sin(time * 8) * 0.25 + 
+    Math.sin(time * 12) * 0.15 +
+    Math.sin(time * 20) * 0.1 +
+    Math.random() * 0.15;
   
-  targetMouthOpenness = Math.max(0, Math.min(1, 0.3 + variation));
+  targetMouthOpenness = Math.max(0.1, Math.min(0.9, 0.4 + variation));
 
   requestAnimationFrame(animateTalking);
 }
@@ -445,7 +525,6 @@ function animate() {
 
   const delta = clock.getDelta();
 
-  // Update VRM
   if (currentVRM && avatarReady) {
     updateIdleAnimation(delta);
     updateBlinking(delta);
@@ -457,14 +536,13 @@ function animate() {
     currentVRM.update(delta);
   }
 
-  // Render
   if (renderer && scene && camera) {
     renderer.render(scene, camera);
   }
 }
 
 // ============================================
-// RESIZE HANDLER
+// RESIZE
 // ============================================
 function onResize() {
   if (!container || !camera || !renderer) return;
@@ -502,7 +580,7 @@ export function dispose3D() {
 }
 
 // ============================================
-// UTILITY EXPORTS
+// EXPORTS
 // ============================================
 export function isAvatarReady() {
   return avatarReady;
