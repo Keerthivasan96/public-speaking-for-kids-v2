@@ -62,7 +62,7 @@ const CONFIG = {
   // Camera looks at a point in the room, avatar is placed there
   cameraX: 0,                   // Camera X position
   cameraY: 1.4,                 // Camera height (eye level)
-  cameraZ: 4.5,                 // Camera distance from scene center
+  cameraZ: 2.5,                 // Camera distance from scene center
   
   // Where camera looks (scene center point)
   lookAtX: 0,
