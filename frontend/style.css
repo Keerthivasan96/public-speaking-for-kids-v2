@@ -66,8 +66,14 @@ html, body {
 }
 
 body {
-  background: #1a1a2e;
+  background: radial-gradient(
+    circle at top,
+    #2a2f5a 0%,
+    #14162b 60%,
+    #0b0c1a 100%
+  );
 }
+
 
 /* ============================================
    MAIN CONTAINER
