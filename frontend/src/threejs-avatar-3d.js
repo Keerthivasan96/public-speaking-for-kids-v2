@@ -87,8 +87,8 @@ const CONFIG = {
   skyBottomColor: 0xE8E0F0,     // Light lavender/white at horizon
   
   // Floor - soft warm gray that complements purple
-  floorCenterColor: 0xE8E4EC,   // Light warm gray (center, under avatar)
-  floorEdgeColor: 0xD0C8D8,     // Slightly darker lavender-gray at edges
+  floorCenterColor: 0xE2DEE9,   // Light warm gray (center, under avatar)
+  floorEdgeColor: 0xC5BCD4,     // Slightly darker lavender-gray at edges
   
   // ===== ANIMATIONS =====
   breathingSpeed: 0.5,
