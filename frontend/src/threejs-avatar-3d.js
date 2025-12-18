@@ -158,7 +158,7 @@ export function init3DScene(containerId = "canvas-container") {
 
   // Create scene
   scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x1a1a2e);
+  scene.background = new THREE.Color(0x8b8ccf);
 
   // Create anchor system
   createAnchors();
