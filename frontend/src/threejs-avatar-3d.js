@@ -1,6 +1,6 @@
 // ============================================
-// threejs-avatar-3d.js - FIXED VERSION
-// Room + Avatar Integration with proper positioning
+// threejs-avatar-3d.js - CINEMATIC VERSION
+// Replika-style atmospheric lighting & composition
 // ============================================
 
 import * as THREE from "three";
@@ -29,7 +29,7 @@ let lookTarget = { x: 0, y: 0 };
 let currentMouthOpenness = 0;
 let targetMouthOpenness = 0;
 
-// Store base rotations for arms
+// Store base rotations
 let baseRotations = {
   leftUpperArm: { x: 0.2, y: 0, z: 1.0 },
   rightUpperArm: { x: 0.2, y: 0, z: -1.0 },
@@ -44,25 +44,29 @@ let currentRoom = null;
 let defaultGround = null;
 let defaultSky = null;
 
+// Lighting objects
+let keyLight, fillLight, rimLight, ambientLight, pointLights = [];
+
 // ============================================
-// SETTINGS - OPTIMIZED FOR ROOM + AVATAR
+// SETTINGS - CINEMATIC REPLIKA STYLE
 // ============================================
 const CONFIG = {
   // Avatar
   avatarScale: 0.9,
-  avatarPositionY: 0, // Will be adjusted based on room
+  avatarPositionY: 0,
   
-  // Camera - REPLIKA-STYLE VIEW
-  cameraDistance: 2.5,      // Closer for intimate feel
-  cameraHeight: 1.4,        // Eye-level view
-  cameraFOV: 35,           // Slightly wider
-  cameraLookAtY: 1.3,      // Look at upper chest/face
-  cameraAngleX: 0.05,      // Slight downward tilt
+  // Camera - CINEMATIC COMPOSITION
+  cameraDistance: 2.2,      // Close-up for intimacy
+  cameraHeight: 1.35,       // Slightly below eye level
+  cameraFOV: 38,            // Natural field of view
+  cameraLookAtY: 1.25,      // Focus on face/upper body
+  cameraAngleX: 0.08,       // Subtle downward angle
   
-  // Room-specific camera (when room is loaded)
-  roomCameraDistance: 3.0,
-  roomCameraHeight: 1.5,
+  // Room camera (when 3D room loaded)
+  roomCameraDistance: 2.8,
+  roomCameraHeight: 1.4,
   roomCameraLookAtY: 1.2,
+  roomCameraOffsetX: 0.3,   // Slight side angle
   
   // Ground
   groundSize: 30,
@@ -71,21 +75,37 @@ const CONFIG = {
   skyTopColor: 0x87CEEB,
   skyBottomColor: 0xE6B3CC,
   
-  // Breathing - SUBTLE
+  // Lighting - CINEMATIC 3-POINT SETUP
+  keyLightIntensity: 2.5,
+  keyLightColor: 0xfff5e6,      // Warm key light
+  fillLightIntensity: 1.2,
+  fillLightColor: 0xb3d9ff,     // Cool fill light
+  rimLightIntensity: 1.8,
+  rimLightColor: 0xffffff,
+  ambientIntensity: 0.6,
+  ambientColor: 0x404866,       // Subtle blue ambient
+  
+  // Atmospheric effects
+  enableFog: true,
+  fogColor: 0x1a1a2e,
+  fogNear: 8,
+  fogFar: 20,
+  
+  // Breathing
   breathingSpeed: 0.5,
   breathingAmount: 0.005,
   
-  // HEAD looking around
+  // Head movement
   lookAroundInterval: 5000,
   lookAroundDuration: 2500,
-  lookAmountX: 0.1,
-  lookAmountY: 0.05,
+  lookAmountX: 0.12,
+  lookAmountY: 0.06,
   
-  // Arm micro-movement
+  // Arm movement
   armSwayAmount: 0.008,
   armSwaySpeed: 0.3,
   
-  // Gesture
+  // Gestures
   gestureInterval: 10000,
   gestureDuration: 1500,
   
@@ -114,21 +134,29 @@ export function init3DScene(containerId = "canvas-container") {
   }
   container.querySelectorAll("canvas").forEach(c => c.remove());
 
+  // Renderer with enhanced settings
   renderer = new THREE.WebGLRenderer({ 
     antialias: true, 
-    alpha: false 
+    alpha: false,
+    powerPreference: "high-performance"
   });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(container.clientWidth, container.clientHeight);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.0;
+  renderer.toneMappingExposure = 1.2;  // Slightly brighter
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   
   container.appendChild(renderer.domElement);
 
   scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x0a0a0f); // Dark background for contrast
+  
+  // Add atmospheric fog
+  if (CONFIG.enableFog) {
+    scene.fog = new THREE.Fog(CONFIG.fogColor, CONFIG.fogNear, CONFIG.fogFar);
+  }
   
   createSky();
   createGround();
@@ -140,39 +168,141 @@ export function init3DScene(containerId = "canvas-container") {
     100
   );
   
-  // Initial camera position
   updateCameraPosition();
-
-  setupLights();
+  setupCinematicLights();
 
   window.addEventListener("resize", onResize, { passive: true });
 
   animate();
 
-  console.log("[3D] ✅ Scene initialized");
+  console.log("[3D] ✅ Cinematic scene initialized");
   return true;
 }
 
 // ============================================
-// UPDATE CAMERA POSITION
+// UPDATE CAMERA POSITION - CINEMATIC ANGLES
 // ============================================
 function updateCameraPosition() {
   const hasRoomLoaded = currentRoom !== null;
   
-  // Use different camera settings for room vs default
-  const distance = hasRoomLoaded ? CONFIG.roomCameraDistance : CONFIG.cameraDistance;
-  const height = hasRoomLoaded ? CONFIG.roomCameraHeight : CONFIG.cameraHeight;
-  const lookAtY = hasRoomLoaded ? CONFIG.roomCameraLookAtY : CONFIG.cameraLookAtY;
+  if (hasRoomLoaded) {
+    // Room view - slightly off-center for depth
+    camera.position.set(
+      CONFIG.roomCameraOffsetX,
+      CONFIG.roomCameraHeight,
+      CONFIG.roomCameraDistance
+    );
+    camera.lookAt(0, CONFIG.roomCameraLookAtY, 0);
+  } else {
+    // Default view - centered
+    camera.position.set(0, CONFIG.cameraHeight, CONFIG.cameraDistance);
+    camera.lookAt(0, CONFIG.cameraLookAtY, 0);
+  }
   
-  camera.position.set(0, height, distance);
-  camera.lookAt(0, lookAtY, 0);
+  camera.rotation.x -= CONFIG.cameraAngleX;
   
-  // Add slight downward angle for more natural view
-  camera.rotation.x = -CONFIG.cameraAngleX;
+  console.log("[3D] Camera positioned:", camera.position);
 }
 
 // ============================================
-// CREATE SKY
+// CINEMATIC 3-POINT LIGHTING SETUP
+// ============================================
+function setupCinematicLights() {
+  // Clear existing lights
+  scene.children = scene.children.filter(child => 
+    !(child instanceof THREE.Light)
+  );
+  pointLights = [];
+
+  // 1. AMBIENT - Soft base illumination
+  ambientLight = new THREE.AmbientLight(
+    CONFIG.ambientColor,
+    CONFIG.ambientIntensity
+  );
+  scene.add(ambientLight);
+
+  // 2. KEY LIGHT - Main dramatic light (front-right)
+  keyLight = new THREE.DirectionalLight(
+    CONFIG.keyLightColor,
+    CONFIG.keyLightIntensity
+  );
+  keyLight.position.set(3, 4, 3);
+  keyLight.castShadow = true;
+  keyLight.shadow.mapSize.width = 2048;
+  keyLight.shadow.mapSize.height = 2048;
+  keyLight.shadow.camera.near = 0.5;
+  keyLight.shadow.camera.far = 15;
+  keyLight.shadow.camera.left = -4;
+  keyLight.shadow.camera.right = 4;
+  keyLight.shadow.camera.top = 4;
+  keyLight.shadow.camera.bottom = -4;
+  keyLight.shadow.bias = -0.0001;
+  scene.add(keyLight);
+
+  // 3. FILL LIGHT - Soften shadows (front-left)
+  fillLight = new THREE.DirectionalLight(
+    CONFIG.fillLightColor,
+    CONFIG.fillLightIntensity
+  );
+  fillLight.position.set(-2.5, 2, 2);
+  scene.add(fillLight);
+
+  // 4. RIM LIGHT - Edge highlight (back)
+  rimLight = new THREE.DirectionalLight(
+    CONFIG.rimLightColor,
+    CONFIG.rimLightIntensity
+  );
+  rimLight.position.set(0, 3, -4);
+  scene.add(rimLight);
+
+  // 5. HEMISPHERE - Natural sky/ground bounce
+  const hemiLight = new THREE.HemisphereLight(
+    0x4a5f8f,  // Sky color - cool blue
+    0x2a2a3e,  // Ground color - dark purple
+    0.5
+  );
+  scene.add(hemiLight);
+
+  // 6. ACCENT POINT LIGHTS - Add depth & atmosphere
+  const accentLight1 = new THREE.PointLight(0x00d4ff, 1.5, 8);
+  accentLight1.position.set(-3, 2, 1);
+  scene.add(accentLight1);
+  pointLights.push(accentLight1);
+
+  const accentLight2 = new THREE.PointLight(0xff6b9d, 1.2, 6);
+  accentLight2.position.set(2, 1.5, -2);
+  scene.add(accentLight2);
+  pointLights.push(accentLight2);
+
+  console.log("[3D] ✅ Cinematic lighting setup complete");
+}
+
+// ============================================
+// ROOM-SPECIFIC LIGHTING ENHANCEMENT
+// ============================================
+function enhanceRoomLighting() {
+  if (!currentRoom) return;
+
+  // Add room-specific atmospheric lights
+  const roomAccent1 = new THREE.PointLight(0x00ffff, 2.0, 10);
+  roomAccent1.position.set(0, 2.5, -3);
+  scene.add(roomAccent1);
+  pointLights.push(roomAccent1);
+
+  const roomAccent2 = new THREE.PointLight(0xff00ff, 1.8, 8);
+  roomAccent2.position.set(3, 2, 0);
+  scene.add(roomAccent2);
+  pointLights.push(roomAccent2);
+
+  // Increase key light for room scenes
+  if (keyLight) keyLight.intensity = 3.0;
+  if (ambientLight) ambientLight.intensity = 0.8;
+
+  console.log("[3D] Room lighting enhanced");
+}
+
+// ============================================
+// CREATE SKY - GRADIENT BACKDROP
 // ============================================
 function createSky() {
   const skyGeo = new THREE.SphereGeometry(50, 32, 32);
@@ -212,7 +342,7 @@ function createSky() {
 }
 
 // ============================================
-// CREATE GROUND
+// CREATE GROUND - SUBTLE GRADIENT
 // ============================================
 function createGround() {
   const groundGeo = new THREE.PlaneGeometry(CONFIG.groundSize, CONFIG.groundSize);
@@ -247,38 +377,6 @@ function createGround() {
   defaultGround.receiveShadow = true;
   defaultGround.name = "defaultGround";
   scene.add(defaultGround);
-}
-
-// ============================================
-// SETUP LIGHTING
-// ============================================
-function setupLights() {
-  const mainLight = new THREE.DirectionalLight(0xffffff, 1.5);
-  mainLight.position.set(3, 5, 3);
-  mainLight.castShadow = true;
-  mainLight.shadow.mapSize.width = 2048;
-  mainLight.shadow.mapSize.height = 2048;
-  mainLight.shadow.camera.near = 0.5;
-  mainLight.shadow.camera.far = 20;
-  mainLight.shadow.camera.left = -5;
-  mainLight.shadow.camera.right = 5;
-  mainLight.shadow.camera.top = 5;
-  mainLight.shadow.camera.bottom = -5;
-  scene.add(mainLight);
-
-  const fillLight = new THREE.DirectionalLight(0xffeedd, 0.6);
-  fillLight.position.set(-2, 3, -1);
-  scene.add(fillLight);
-
-  const backLight = new THREE.DirectionalLight(0xaaccff, 0.5);
-  backLight.position.set(0, 2, -3);
-  scene.add(backLight);
-
-  const hemiLight = new THREE.HemisphereLight(0x87CEEB, 0x8B7355, 0.7);
-  scene.add(hemiLight);
-
-  const ambient = new THREE.AmbientLight(0xffffff, 0.4);
-  scene.add(ambient);
 }
 
 // ============================================
@@ -326,22 +424,28 @@ export async function loadVRMAvatar(vrmPath) {
         const scale = targetHeight / size.y;
         vrm.scene.scale.setScalar(scale);
 
-        // PROPER POSITIONING: Avatar stands on ground (y=0)
         vrm.scene.position.set(
           -center.x * scale,
-          -box.min.y * scale + CONFIG.avatarPositionY, // Feet at ground level
+          -box.min.y * scale + CONFIG.avatarPositionY,
           -center.z * scale
         );
 
+        // Enhanced material properties for better lighting response
         vrm.scene.traverse((obj) => {
           if (obj.isMesh) {
             obj.castShadow = true;
             obj.receiveShadow = true;
-            // Fix material rendering
+            
             if (obj.material) {
               obj.material.side = THREE.FrontSide;
               obj.material.depthWrite = true;
               obj.material.depthTest = true;
+              
+              // Enhance lighting interaction
+              if (obj.material.type === 'MeshStandardMaterial') {
+                obj.material.roughness = Math.max(obj.material.roughness || 0.5, 0.4);
+                obj.material.metalness = Math.min(obj.material.metalness || 0, 0.2);
+              }
             }
           }
         });
@@ -350,7 +454,6 @@ export async function loadVRMAvatar(vrmPath) {
         currentVRM = vrm;
         avatarReady = true;
 
-        // Reset timers
         idleTime = 0;
         blinkTimer = 0;
         gestureTimer = 0;
@@ -361,8 +464,7 @@ export async function loadVRMAvatar(vrmPath) {
 
         if (loadingEl) loadingEl.classList.remove("active");
 
-        console.log("[3D] ✅ VRM loaded! Position:", vrm.scene.position);
-        console.log("[3D] Avatar bbox:", box);
+        console.log("[3D] ✅ VRM loaded with cinematic lighting!");
         
         if (vrm.expressionManager) {
           console.log("[3D] Expressions:", Object.keys(vrm.expressionManager.expressionMap));
@@ -384,7 +486,7 @@ export async function loadVRMAvatar(vrmPath) {
 }
 
 // ============================================
-// LOAD ROOM MODEL
+// LOAD ROOM MODEL - WITH PROPER POSITIONING
 // ============================================
 export async function loadRoomModel(glbPath) {
   console.log("[3D] Loading room:", glbPath);
@@ -392,7 +494,6 @@ export async function loadRoomModel(glbPath) {
   const loadingEl = document.getElementById("loading-indicator");
   if (loadingEl) loadingEl.classList.add("active");
 
-  // Remove existing room
   if (currentRoom) {
     scene.remove(currentRoom);
     currentRoom = null;
@@ -406,70 +507,74 @@ export async function loadRoomModel(glbPath) {
       (gltf) => {
         const room = gltf.scene;
         
-        // Calculate room bounds
         const roomBox = new THREE.Box3().setFromObject(room);
         const roomSize = roomBox.getSize(new THREE.Vector3());
         const roomCenter = roomBox.getCenter(new THREE.Vector3());
         
-        console.log("[3D] Room size:", roomSize);
-        console.log("[3D] Room center:", roomCenter);
-        console.log("[3D] Room min/max:", roomBox.min, roomBox.max);
+        console.log("[3D] Room bounds:", {
+          size: roomSize,
+          center: roomCenter,
+          min: roomBox.min,
+          max: roomBox.max
+        });
         
-        // PROPER ROOM POSITIONING
-        // Center the room horizontally and align floor to y=0
+        // Position room: floor at y=0, centered horizontally
         room.position.set(
           -roomCenter.x,
-          -roomBox.min.y, // Floor at y=0
-          -roomCenter.z
+          -roomBox.min.y,
+          -roomCenter.z + 1.5  // Push room back slightly
         );
         
-        // Optional: Scale room if needed
-        // Uncomment if room is too big/small
-        // const targetRoomSize = 10; // Adjust as needed
-        // const roomScale = targetRoomSize / Math.max(roomSize.x, roomSize.z);
-        // room.scale.setScalar(roomScale);
+        // Optional scaling for Tron Studio (it's usually well-scaled)
+        // Uncomment if needed:
+        // room.scale.setScalar(0.8);
         
-        // Enable shadows and fix materials
+        // Enhance materials for cinematic look
         room.traverse((obj) => {
           if (obj.isMesh) {
             obj.castShadow = true;
             obj.receiveShadow = true;
             
-            // Fix material rendering
             if (obj.material) {
               obj.material.side = THREE.FrontSide;
               obj.material.depthWrite = true;
               obj.material.depthTest = true;
               
-              // Enhance lighting response
+              // Enhance emissive materials (screens, lights in room)
+              if (obj.material.emissive) {
+                obj.material.emissiveIntensity = 1.5;
+              }
+              
+              // Adjust metallicness for sci-fi look
               if (obj.material.metalness !== undefined) {
-                obj.material.metalness = Math.min(obj.material.metalness, 0.5);
+                obj.material.metalness = Math.min(obj.material.metalness * 1.2, 0.9);
               }
               if (obj.material.roughness !== undefined) {
-                obj.material.roughness = Math.max(obj.material.roughness, 0.4);
+                obj.material.roughness = Math.max(obj.material.roughness, 0.3);
               }
             }
           }
         });
 
-        // Hide default ground and sky
+        // Hide default environment
         if (defaultGround) defaultGround.visible = false;
         if (defaultSky) defaultSky.visible = false;
 
         scene.add(room);
         currentRoom = room;
         
-        // Update camera for room view
+        // Update lighting and camera for room
+        enhanceRoomLighting();
         updateCameraPosition();
         
-        // Reposition avatar if already loaded
+        // Reposition avatar if loaded
         if (currentVRM) {
           positionAvatarInRoom();
         }
 
         if (loadingEl) loadingEl.classList.remove("active");
 
-        console.log("[3D] ✅ Room loaded! Position:", room.position);
+        console.log("[3D] ✅ Room loaded with cinematic setup!");
         resolve(room);
       },
       (progress) => {
@@ -491,12 +596,11 @@ export async function loadRoomModel(glbPath) {
 function positionAvatarInRoom() {
   if (!currentVRM || !currentRoom) return;
   
-  // Avatar should stand on floor (y=0) slightly forward from center
-  const avatarZ = 0.5; // Adjust this to move avatar forward/back in room
+  // Avatar stands on floor, slightly forward in frame
+  currentVRM.scene.position.z = 0.8;
+  currentVRM.scene.position.x = 0;
   
-  currentVRM.scene.position.z = avatarZ;
-  
-  console.log("[3D] Avatar repositioned for room:", currentVRM.scene.position);
+  console.log("[3D] Avatar positioned in room:", currentVRM.scene.position);
 }
 
 // ============================================
@@ -508,11 +612,20 @@ export function removeRoom() {
     currentRoom = null;
   }
   
-  // Show default ground and sky
+  // Remove room-specific lights
+  pointLights.forEach(light => {
+    if (light.parent) scene.remove(light);
+  });
+  pointLights = [];
+  
+  // Reset lighting
+  if (keyLight) keyLight.intensity = CONFIG.keyLightIntensity;
+  if (ambientLight) ambientLight.intensity = CONFIG.ambientIntensity;
+  
+  // Show default environment
   if (defaultGround) defaultGround.visible = true;
   if (defaultSky) defaultSky.visible = true;
   
-  // Reset camera to default position
   updateCameraPosition();
   
   console.log("[3D] Room removed");
@@ -523,39 +636,6 @@ export function removeRoom() {
 // ============================================
 export function hasRoom() {
   return currentRoom !== null;
-}
-
-// ============================================
-// ADD FURNITURE/PROP
-// ============================================
-export async function addProp(glbPath, position = {x: 0, y: 0, z: 0}, scale = 1) {
-  return new Promise((resolve, reject) => {
-    const loader = new GLTFLoader();
-
-    loader.load(
-      glbPath,
-      (gltf) => {
-        const prop = gltf.scene;
-        
-        prop.position.set(position.x, position.y, position.z);
-        prop.scale.setScalar(scale);
-        
-        prop.traverse((obj) => {
-          if (obj.isMesh) {
-            obj.castShadow = true;
-            obj.receiveShadow = true;
-          }
-        });
-
-        scene.add(prop);
-
-        console.log("[3D] ✅ Prop added:", glbPath);
-        resolve(prop);
-      },
-      undefined,
-      reject
-    );
-  });
 }
 
 // ============================================
@@ -928,7 +1008,7 @@ export function setSkyColors(topColor, bottomColor) {
 export function adjustAvatarPosition(x, y, z) {
   if (currentVRM) {
     currentVRM.scene.position.set(x, y, z);
-    console.log("[3D] Avatar position adjusted:", currentVRM.scene.position);
+    console.log("[3D] Avatar position:", currentVRM.scene.position);
   }
 }
 
@@ -936,8 +1016,15 @@ export function adjustCameraPosition(distance, height, lookAtY) {
   if (camera) {
     camera.position.set(0, height, distance);
     camera.lookAt(0, lookAtY, 0);
-    console.log("[3D] Camera adjusted:", camera.position);
+    console.log("[3D] Camera:", camera.position);
   }
+}
+
+export function adjustLighting(keyIntensity, fillIntensity, rimIntensity) {
+  if (keyLight) keyLight.intensity = keyIntensity;
+  if (fillLight) fillLight.intensity = fillIntensity;
+  if (rimLight) rimLight.intensity = rimIntensity;
+  console.log("[3D] Lighting adjusted");
 }
 
 // ============================================
