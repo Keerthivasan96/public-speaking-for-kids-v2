@@ -1,6 +1,6 @@
 // ============================================
-// app.js - LOW LATENCY STREAMING VERSION
-// Streams LLM response + speaks in chunks
+// app.js - DEBUGGED LOW LATENCY VERSION
+// With better logging and speech synthesis fixes
 // ============================================
 
 import { startListening, stopListening } from "./speech.js";
@@ -17,9 +17,8 @@ import {
 } from "./threejs-avatar-3d.js";
 
 // ============================================
-// API CONFIGURATION
+// API CONFIGURATION - UPDATE THESE!
 // ============================================
-// Streaming endpoint (you'll need to update your backend)
 const API_URL = "https://public-speaking-for-kids-backend-v2.vercel.app/api/generate";
 const API_STREAM_URL = "https://public-speaking-for-kids-backend-v2.vercel.app/api/stream";
 
@@ -84,13 +83,10 @@ let musicVolume = 0.3;
 // STREAMING CONFIGURATION
 // ============================================
 const STREAM_CONFIG = {
-  // Minimum characters before speaking first chunk
   minCharsToSpeak: 15,
-  // Characters to look for sentence breaks
   sentenceBreaks: ['.', '!', '?', ',', ';', ':'],
-  // Use streaming (set to false to use regular API)
-  useStreaming: true,
-  // Speak as sentences complete (true) or word by word (false)
+  // Set to FALSE to use regular API (more stable)
+  useStreaming: false,  // DISABLED for debugging
   speakBySentence: true,
 };
 
@@ -108,7 +104,7 @@ const MAX_HISTORY_ITEMS = 200;
 // ============================================
 function log(message) {
   const timestamp = new Date().toLocaleTimeString();
-  console.log(`[App] ${message}`);
+  console.log(`[App ${timestamp}] ${message}`);
   
   if (logEl) {
     logEl.innerHTML += `<span style="color:#999">[${timestamp}]</span> ${message}<br>`;
@@ -133,7 +129,7 @@ function loadConversationHistory() {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       conversationHistory = JSON.parse(saved);
-      log(`📂 Loaded ${conversationHistory.length} messages from history`);
+      log(`📂 Loaded ${conversationHistory.length} messages`);
       return true;
     }
   } catch (err) {
@@ -146,62 +142,46 @@ function clearConversationStorage() {
   try {
     localStorage.removeItem(STORAGE_KEY);
     conversationHistory = [];
-    log("🗑️ Conversation history cleared");
+    log("🗑️ History cleared");
   } catch (err) {
-    console.error("Failed to clear history:", err);
+    console.error("Failed to clear:", err);
   }
 }
 
 function saveAvatarChoice(path) {
-  try {
-    localStorage.setItem(AVATAR_KEY, path);
-  } catch (err) {
-    console.error("Failed to save avatar choice:", err);
-  }
+  try { localStorage.setItem(AVATAR_KEY, path); } catch (err) {}
 }
 
 function loadAvatarChoice() {
-  try {
-    return localStorage.getItem(AVATAR_KEY) || "/assets/vrmavatar1.vrm";
-  } catch (err) {
-    return "/assets/vrmavatar1.vrm";
-  }
+  try { return localStorage.getItem(AVATAR_KEY) || "/assets/vrmavatar1.vrm"; } 
+  catch (err) { return "/assets/vrmavatar1.vrm"; }
 }
 
 function saveMusicState(playing) {
-  try {
-    localStorage.setItem(MUSIC_KEY, playing ? "on" : "off");
-  } catch (err) {}
+  try { localStorage.setItem(MUSIC_KEY, playing ? "on" : "off"); } catch (err) {}
 }
 
 function loadMusicState() {
-  try {
-    return localStorage.getItem(MUSIC_KEY) === "on";
-  } catch (err) {
-    return false;
-  }
+  try { return localStorage.getItem(MUSIC_KEY) === "on"; } 
+  catch (err) { return false; }
 }
 
 function saveMusicVolume(volume) {
-  try {
-    localStorage.setItem(VOLUME_KEY, volume.toString());
-  } catch (err) {}
+  try { localStorage.setItem(VOLUME_KEY, volume.toString()); } catch (err) {}
 }
 
 function loadMusicVolume() {
   try {
     const saved = localStorage.getItem(VOLUME_KEY);
     return saved ? parseFloat(saved) : 0.3;
-  } catch (err) {
-    return 0.3;
-  }
+  } catch (err) { return 0.3; }
 }
 
 // ============================================
 // MUSIC PLAYER
 // ============================================
 function initMusic() {
-  log("🎵 Initializing music system...");
+  log("🎵 Init music...");
   
   backgroundMusic = document.createElement("audio");
   backgroundMusic.loop = true;
@@ -214,44 +194,26 @@ function initMusic() {
     "/assets/music/ambient.mp3",
     "/assets/music/ambient1.mp3",
     "/assets/music/background.mp3",
-    "/assets/music/lofi.mp3",
-    "/assets/music/music.mp3"
   ];
   
-  let currentFileIndex = 0;
-  
-  function tryNextMusicFile() {
-    if (currentFileIndex >= musicFiles.length) {
-      log("🎵 No music files found");
-      return;
-    }
-    backgroundMusic.src = musicFiles[currentFileIndex];
-    currentFileIndex++;
+  let idx = 0;
+  function tryNext() {
+    if (idx >= musicFiles.length) { log("🎵 No music found"); return; }
+    backgroundMusic.src = musicFiles[idx++];
   }
   
-  backgroundMusic.addEventListener("error", tryNextMusicFile);
-  backgroundMusic.addEventListener("canplaythrough", () => {
-    log("🎵 Music ready!");
-  });
+  backgroundMusic.addEventListener("error", tryNext);
+  backgroundMusic.addEventListener("canplaythrough", () => log("🎵 Music ready!"));
+  tryNext();
   
-  tryNextMusicFile();
-  
-  if (musicVolumeSlider) {
-    musicVolumeSlider.value = musicVolume * 100;
-  }
+  if (musicVolumeSlider) musicVolumeSlider.value = musicVolume * 100;
 }
 
 function playMusic() {
-  if (!backgroundMusic || !backgroundMusic.src) return;
-  
+  if (!backgroundMusic?.src) return;
   backgroundMusic.play()
-    .then(() => {
-      isMusicPlaying = true;
-      saveMusicState(true);
-      updateMusicToggleUI();
-      log("🎵 Music playing");
-    })
-    .catch(err => log("🎵 Playback blocked: " + err.message));
+    .then(() => { isMusicPlaying = true; saveMusicState(true); updateMusicToggleUI(); })
+    .catch(err => log("🎵 Blocked: " + err.message));
 }
 
 function pauseMusic() {
@@ -262,9 +224,7 @@ function pauseMusic() {
   updateMusicToggleUI();
 }
 
-function toggleMusic() {
-  isMusicPlaying ? pauseMusic() : playMusic();
-}
+function toggleMusic() { isMusicPlaying ? pauseMusic() : playMusic(); }
 
 function setMusicVolume(volume) {
   musicVolume = Math.max(0, Math.min(1, volume));
@@ -280,15 +240,11 @@ function updateMusicToggleUI() {
 }
 
 function lowerMusicForSpeech() {
-  if (backgroundMusic && isMusicPlaying) {
-    backgroundMusic.volume = musicVolume * 0.15;
-  }
+  if (backgroundMusic && isMusicPlaying) backgroundMusic.volume = musicVolume * 0.15;
 }
 
 function restoreMusicVolume() {
-  if (backgroundMusic && isMusicPlaying) {
-    backgroundMusic.volume = musicVolume;
-  }
+  if (backgroundMusic && isMusicPlaying) backgroundMusic.volume = musicVolume;
 }
 
 // ============================================
@@ -311,57 +267,29 @@ function hideCaptionText() {
 }
 
 // ============================================
-// CORRECTION DISPLAY (Practice Mode)
+// CORRECTION DISPLAY
 // ============================================
 function showCorrection(userText, correctedText, explanation, correctness) {
   if (!correctionContent || !correctionDisplay) return;
-
-  let statusClass = "";
-  let statusIcon = "";
-  let statusText = "";
   
-  switch (correctness) {
-    case "correct":
-      statusClass = "correction-correct";
-      statusIcon = "✔️";
-      statusText = "Perfect!";
-      break;
-    case "almost":
-      statusClass = "correction-almost";
-      statusIcon = "⚠️";
-      statusText = "Almost there!";
-      break;
-    default:
-      statusClass = "correction-wrong";
-      statusIcon = "❌";
-      statusText = "Let's improve";
+  let statusClass = "correction-wrong";
+  let statusIcon = "❌";
+  let statusText = "Let's improve";
+  
+  if (correctness === "correct") {
+    statusClass = "correction-correct"; statusIcon = "✔️"; statusText = "Perfect!";
+  } else if (correctness === "almost") {
+    statusClass = "correction-almost"; statusIcon = "⚠️"; statusText = "Almost!";
   }
 
   correctionContent.innerHTML = `
     <div class="${statusClass}">
-      <div class="correction-display-header">
-        <span>${statusIcon}</span>
-        <span>${statusText}</span>
-      </div>
-      <div class="correction-display-content">
-        <div class="correction-display-section">
-          <div class="correction-display-label">You said:</div>
-          <div class="correction-display-text">"${escapeHtml(userText)}"</div>
-        </div>
-        ${correctness !== "correct" ? `
-          <div class="correction-display-section">
-            <div class="correction-display-label">Better way:</div>
-            <div class="correction-display-text correction-green">"${escapeHtml(correctedText)}"</div>
-          </div>
-          <div style="margin-top: 8px; font-size: 12px; color: #666;">
-            💡 ${escapeHtml(explanation)}
-          </div>
-        ` : `
-          <div style="text-align: center; color: #4caf50; font-weight: 600; margin-top: 8px;">
-            Great job! Keep it up! 🎉
-          </div>
-        `}
-      </div>
+      <div style="font-weight:bold;margin-bottom:8px">${statusIcon} ${statusText}</div>
+      <div style="margin-bottom:4px"><b>You said:</b> "${escapeHtml(userText)}"</div>
+      ${correctness !== "correct" ? `
+        <div style="margin-bottom:4px;color:#4caf50"><b>Better:</b> "${escapeHtml(correctedText)}"</div>
+        <div style="font-size:12px;color:#666">💡 ${escapeHtml(explanation)}</div>
+      ` : `<div style="color:#4caf50">Great job! 🎉</div>`}
     </div>
   `;
   correctionDisplay.style.display = "block";
@@ -376,24 +304,19 @@ function hideCorrection() {
 // ============================================
 function setStatus(message, type = "") {
   if (!statusEl) return;
-
-  const statusMessages = {
+  const messages = {
     ready: "Ready to chat! 💭",
     listening: "Listening... 👂",
     thinking: "Thinking... 💭",
     speaking: "Speaking... 💬",
     streaming: "Responding... ✨",
-    error: "Oops! Something went wrong 😅",
-    paused: "Paused 💭",
-    welcome: "Welcome back! 😊",
-    fresh: "Fresh start! 🌟"
+    error: "Oops! 😅",
   };
-
-  statusEl.textContent = statusMessages[type] || message;
+  statusEl.textContent = messages[type] || message;
 }
 
 // ============================================
-// UTILITY FUNCTIONS
+// UTILITIES
 // ============================================
 function escapeHtml(text) {
   const div = document.createElement("div");
@@ -403,17 +326,6 @@ function escapeHtml(text) {
 
 function cleanMarkdown(text) {
   if (!text) return "";
-  
-  if (typeof marked !== "undefined" && marked.parse) {
-    const html = marked.parse(text);
-    const safe = (typeof DOMPurify !== "undefined" && DOMPurify.sanitize) 
-      ? DOMPurify.sanitize(html) 
-      : html;
-    const div = document.createElement("div");
-    div.innerHTML = safe;
-    return (div.textContent || div.innerText || "").replace(/\s+/g, " ").trim();
-  }
-  
   return text.replace(/[*_~`#\[\]]/g, "").replace(/\s+/g, " ").trim();
 }
 
@@ -423,32 +335,21 @@ function cleanMarkdown(text) {
 function buildPrompt(userText) {
   if (isPracticeMode) {
     return `You are a friendly English learning companion.
-
-TASK: Analyze this sentence for grammar and spelling errors.
-
+TASK: Analyze this sentence for grammar errors.
 Student said: "${userText}"
-
-Respond in this EXACT JSON format:
-{
-  "correctness": "correct" OR "almost" OR "wrong",
-  "corrected": "the corrected sentence",
-  "explanation": "brief explanation (under 15 words)",
-  "reply": "encouraging response (1 sentence)"
-}`;
+Respond in JSON: {"correctness":"correct/almost/wrong","corrected":"...","explanation":"...","reply":"..."}`;
   }
   
-  const personality = `You're a friendly 16-17 year old English companion. Be warm, natural, and concise. No catchphrases.`;
-
-  const recentHistory = conversationHistory.slice(-10).map(msg => 
+  const recentHistory = conversationHistory.slice(-6).map(msg => 
     `${msg.role === "user" ? "Student" : "You"}: ${msg.content}`
   ).join("\n");
 
-  return `${personality}
+  return `You're a friendly 16-17 year old English companion. Be warm and concise (1-2 sentences, under 40 words).
 
 ${recentHistory ? `Recent:\n${recentHistory}\n` : ""}
 Student: "${userText}"
 
-Respond naturally in 1-2 sentences (20-40 words max). Be warm!`;
+Respond naturally:`;
 }
 
 // ============================================
@@ -456,131 +357,92 @@ Respond naturally in 1-2 sentences (20-40 words max). Be warm!`;
 // ============================================
 function selectBestVoice() {
   const voices = window.speechSynthesis.getVoices();
-  if (!voices || voices.length === 0) return null;
+  if (!voices.length) return null;
 
-  const preferredVoices = [
-    "Google US English Female",
-    "Google UK English Female", 
-    "Microsoft Zira",
-    "Samantha",
-    "Karen",
-    "Victoria"
-  ];
-
-  for (const name of preferredVoices) {
+  const preferred = ["Google US English", "Samantha", "Karen", "Victoria", "Zira"];
+  for (const name of preferred) {
     const found = voices.find(v => v.name.includes(name));
     if (found) return found;
   }
-
-  const femaleVoice = voices.find(v => 
-    (v.lang.startsWith("en-US") || v.lang.startsWith("en-GB")) &&
-    /female|woman|girl/i.test(v.name)
-  );
-  if (femaleVoice) return femaleVoice;
-
   return voices.find(v => v.lang.startsWith("en")) || voices[0];
 }
 
 // ============================================
-// STREAMING TEXT-TO-SPEECH
+// TEXT-TO-SPEECH - SIMPLE VERSION
 // ============================================
-
-// Queue system for speaking chunks
-function speakChunk(text, isLast = false) {
+function speak(text) {
   if (!text || !text.trim()) {
-    if (isLast) finishSpeaking();
+    log("⚠️ Empty text, not speaking");
     return;
   }
 
-  const cleanText = cleanMarkdown(text);
+  log(`🔊 Speaking: "${text.substring(0, 50)}..."`);
   
+  // Cancel any current speech
+  try { window.speechSynthesis.cancel(); } catch (e) {}
+  
+  const cleanText = cleanMarkdown(text);
+  lastSpokenText = cleanText;
+  
+  // Show caption
+  showCaptionText(cleanText);
+  setStatus("Speaking... 💬", "speaking");
+  
+  // Create utterance
   const utterance = new SpeechSynthesisUtterance(cleanText);
   utterance.lang = "en-US";
   utterance.volume = 1.0;
-  utterance.rate = IS_MOBILE ? (IS_ANDROID ? 0.9 : 0.92) : 1.0;
-  utterance.pitch = IS_MOBILE ? (IS_ANDROID ? 1.1 : 1.12) : 1.15;
+  utterance.rate = IS_MOBILE ? 0.9 : 0.95;
+  utterance.pitch = IS_MOBILE ? 1.1 : 1.15;
   
+  // Set voice
   const voice = selectBestVoice();
-  if (voice) utterance.voice = voice;
+  if (voice) {
+    utterance.voice = voice;
+    log(`🔊 Using voice: ${voice.name}`);
+  }
 
   utterance.onstart = () => {
-    if (!isSpeaking) {
-      isSpeaking = true;
-      avatarStartTalking();
-      lowerMusicForSpeech();
-    }
+    log("🔊 Speech started");
+    isSpeaking = true;
+    avatarStartTalking();
+    lowerMusicForSpeech();
   };
 
   utterance.onend = () => {
-    // Process next chunk in queue
-    if (speechQueue.length > 0) {
-      const next = speechQueue.shift();
-      speakChunk(next.text, next.isLast);
-    } else if (isLast) {
-      finishSpeaking();
+    log("🔊 Speech ended");
+    isSpeaking = false;
+    avatarStopTalking();
+    hideCaptionText();
+    restoreMusicVolume();
+    
+    if (isContinuousMode) {
+      setTimeout(startNextListeningCycle, IS_MOBILE ? 1000 : 600);
+    } else {
+      setStatus("Your turn! 💭", "ready");
     }
   };
 
   utterance.onerror = (e) => {
-    console.error("Speech error:", e);
-    if (speechQueue.length > 0) {
-      const next = speechQueue.shift();
-      speakChunk(next.text, next.isLast);
-    } else {
-      finishSpeaking();
+    log(`❌ Speech error: ${e.error}`);
+    isSpeaking = false;
+    avatarStopTalking();
+    hideCaptionText();
+    restoreMusicVolume();
+    
+    if (isContinuousMode) {
+      setTimeout(startNextListeningCycle, 1500);
     }
   };
 
-  currentUtterance = utterance;
-  window.speechSynthesis.speak(utterance);
-}
-
-function queueSpeechChunk(text, isLast = false) {
-  if (!isSpeaking && speechQueue.length === 0) {
-    // Start speaking immediately
-    speakChunk(text, isLast);
-  } else {
-    // Queue for later
-    speechQueue.push({ text, isLast });
-  }
-}
-
-function finishSpeaking() {
-  isSpeaking = false;
-  avatarStopTalking();
-  hideCaptionText();
-  restoreMusicVolume();
-  speechQueue = [];
-  currentUtterance = null;
-
-  if (isContinuousMode) {
-    const delay = IS_MOBILE ? 800 : 500;
-    setTimeout(startNextListeningCycle, delay);
-  } else {
-    setStatus("Your turn! 💭", "ready");
-  }
-}
-
-// Non-streaming speak (legacy)
-function speak(text) {
-  if (!text || !text.trim()) return;
-  stopSpeech();
-  
-  const cleanText = cleanMarkdown(text);
-  lastSpokenText = cleanText;
-  showCaptionText(cleanText);
-  setStatus("Speaking... 💬", "speaking");
-  
-  queueSpeechChunk(cleanText, true);
+  // Speak with small delay (helps on mobile)
+  setTimeout(() => {
+    window.speechSynthesis.speak(utterance);
+  }, 100);
 }
 
 function stopSpeech() {
-  try {
-    window.speechSynthesis.cancel();
-  } catch (e) {}
-  
-  speechQueue = [];
-  currentUtterance = null;
+  try { window.speechSynthesis.cancel(); } catch (e) {}
   isSpeaking = false;
   avatarStopTalking();
   hideCaptionText();
@@ -599,7 +461,7 @@ function startNextListeningCycle() {
   
   startListening(handleUserSpeech, {
     continuous: false,
-    lang: "en-IN",
+    lang: "en-US",
     interimResults: true
   });
 }
@@ -616,7 +478,6 @@ function handleUserSpeech(text, isFinal = true) {
 
   if (!isFinal) {
     speechBuffer = text;
-    // Show interim text in caption
     showCaptionText(`You: ${text}...`);
     return;
   }
@@ -629,21 +490,27 @@ function handleUserSpeech(text, isFinal = true) {
 }
 
 // ============================================
-// STREAMING BACKEND API
+// BACKEND API - MAIN ENTRY POINT
 // ============================================
 async function sendToBackend(text) {
   if (!text || !text.trim()) return;
 
-  // Stop any ongoing stream
+  log(`📤 Sending to backend: "${text}"`);
+
+  // Stop any ongoing speech/stream
+  stopSpeech();
   if (streamController) {
     streamController.abort();
     streamController = null;
   }
-  stopSpeech();
 
+  // Add to history
   conversationHistory.push({ role: "user", content: text });
   saveConversationHistory();
 
+  setStatus("Thinking... 💭", "thinking");
+
+  // Use streaming or regular API
   if (STREAM_CONFIG.useStreaming && !isPracticeMode) {
     await streamFromBackend(text);
   } else {
@@ -652,15 +519,61 @@ async function sendToBackend(text) {
 }
 
 // ============================================
-// STREAMING RESPONSE HANDLER
+// NON-STREAMING API CALL (MORE STABLE)
+// ============================================
+async function fetchFromBackend(text) {
+  log(`📡 Fetching from: ${API_URL}`);
+
+  try {
+    const prompt = buildPrompt(text);
+    log(`📝 Prompt length: ${prompt.length} chars`);
+
+    const response = await fetch(API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        prompt: prompt,
+        temperature: isPracticeMode ? 0.3 : 0.7,
+        max_tokens: isPracticeMode ? 200 : 100,
+      }),
+    });
+
+    log(`📥 Response status: ${response.status}`);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      log(`❌ API Error: ${response.status} - ${errorText}`);
+      throw new Error(`API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    log(`📥 Response data: ${JSON.stringify(data).substring(0, 100)}...`);
+
+    const reply = data.reply || data.text || data.content || "Sorry, I didn't understand.";
+
+    if (isPracticeMode) {
+      handlePracticeModeResponse(text, reply);
+    } else {
+      handleCasualModeResponse(reply);
+    }
+
+  } catch (err) {
+    console.error("Backend error:", err);
+    log(`❌ Backend error: ${err.message}`);
+    setStatus("Oops! 😅", "error");
+    speak("Sorry, I had trouble connecting. Can you try again?");
+  }
+}
+
+// ============================================
+// STREAMING API CALL
 // ============================================
 async function streamFromBackend(text) {
+  log(`📡 Streaming from: ${API_STREAM_URL}`);
+  
   setStatus("Responding... ✨", "streaming");
   isStreaming = true;
   fullResponseText = "";
-  
-  let sentenceBuffer = "";
-  let hasStartedSpeaking = false;
 
   streamController = new AbortController();
 
@@ -670,12 +583,13 @@ async function streamFromBackend(text) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         prompt: buildPrompt(text),
-        temperature: 0.5,
+        temperature: 0.7,
         max_tokens: 100,
-        stream: true
       }),
       signal: streamController.signal
     });
+
+    log(`📥 Stream response status: ${response.status}`);
 
     if (!response.ok) {
       throw new Error(`Stream error: ${response.status}`);
@@ -686,97 +600,47 @@ async function streamFromBackend(text) {
 
     while (true) {
       const { done, value } = await reader.read();
-      
       if (done) break;
 
       const chunk = decoder.decode(value, { stream: true });
       
-      // Parse SSE data
-      const lines = chunk.split('\n');
-      for (const line of lines) {
+      for (const line of chunk.split('\n')) {
         if (line.startsWith('data: ')) {
           const data = line.slice(6);
           
-          if (data === '[DONE]') {
-            break;
-          }
+          if (data === '[DONE]') continue;
 
           try {
             const parsed = JSON.parse(data);
-            const token = parsed.token || parsed.content || parsed.text || '';
+            const token = parsed.token || '';
             
             if (token) {
               fullResponseText += token;
-              sentenceBuffer += token;
-              
-              // Update caption with full text so far
               updateCaptionText(fullResponseText);
-              
-              // Check for sentence break to speak
-              if (STREAM_CONFIG.speakBySentence) {
-                const lastChar = token.trim().slice(-1);
-                if (STREAM_CONFIG.sentenceBreaks.includes(lastChar) && 
-                    sentenceBuffer.length >= STREAM_CONFIG.minCharsToSpeak) {
-                  
-                  if (!hasStartedSpeaking) {
-                    hasStartedSpeaking = true;
-                    showCaptionText(fullResponseText);
-                    avatarStartTalking();
-                    isSpeaking = true;
-                    lowerMusicForSpeech();
-                  }
-                  
-                  queueSpeechChunk(sentenceBuffer.trim(), false);
-                  sentenceBuffer = "";
-                }
-              }
             }
           } catch (e) {
-            // Not JSON, might be raw text
-            if (data && data.trim()) {
-              fullResponseText += data;
-              sentenceBuffer += data;
-              updateCaptionText(fullResponseText);
-            }
+            // Skip parse errors
           }
         }
       }
     }
 
-    // Speak any remaining text
-    if (sentenceBuffer.trim()) {
-      if (!hasStartedSpeaking) {
-        showCaptionText(fullResponseText);
-        avatarStartTalking();
-        isSpeaking = true;
-        lowerMusicForSpeech();
-      }
-      queueSpeechChunk(sentenceBuffer.trim(), true);
-    } else if (hasStartedSpeaking) {
-      // Mark last queued chunk as final
-      if (speechQueue.length > 0) {
-        speechQueue[speechQueue.length - 1].isLast = true;
-      } else {
-        finishSpeaking();
-      }
-    } else if (fullResponseText.trim()) {
-      // Fallback: speak entire response
-      speak(fullResponseText);
-    }
+    log(`📥 Stream complete: "${fullResponseText.substring(0, 50)}..."`);
 
-    // Save to history
     if (fullResponseText.trim()) {
       conversationHistory.push({ role: "assistant", content: fullResponseText });
       saveConversationHistory();
+      speak(fullResponseText);
+    } else {
+      log("⚠️ Empty stream response");
+      speak("Sorry, I didn't get a response. Can you try again?");
     }
 
   } catch (err) {
     if (err.name === 'AbortError') {
       log("⏹️ Stream aborted");
     } else {
-      console.error("Stream error:", err);
-      log("❌ Stream error: " + err.message);
-      
+      log(`❌ Stream error: ${err.message}`);
       // Fallback to non-streaming
       log("🔄 Falling back to non-streaming...");
       await fetchFromBackend(text);
@@ -788,48 +652,16 @@ async function streamFromBackend(text) {
 }
 
 // ============================================
-// NON-STREAMING FALLBACK
+// RESPONSE HANDLERS
 // ============================================
-async function fetchFromBackend(text) {
-  setStatus("Thinking... 💭", "thinking");
-
-  try {
-    const response = await fetch(API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        prompt: buildPrompt(text),
-        temperature: isPracticeMode ? 0.3 : 0.5,
-        max_tokens: isPracticeMode ? 200 : 100,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    const reply = data.reply || "I'm here to help! Could you say that again?";
-
-    if (isPracticeMode) {
-      handlePracticeModeResponse(text, reply);
-    } else {
-      handleCasualModeResponse(reply);
-    }
-  } catch (err) {
-    console.error("Backend error:", err);
-    log("❌ Backend error: " + err.message);
-    setStatus("Oops! 😅", "error");
-    speak("Sorry, I had a connection issue. Can you try again?");
-  }
-}
-
 function handlePracticeModeResponse(userText, reply) {
+  log(`📝 Practice mode response: ${reply.substring(0, 100)}`);
+  
   try {
     const cleanedReply = reply.replace(/```json\n?|\n?```/g, "").trim();
     const parsed = JSON.parse(cleanedReply);
 
-    conversationHistory.push({ role: "assistant", content: parsed.reply });
+    conversationHistory.push({ role: "assistant", content: parsed.reply || reply });
     saveConversationHistory();
 
     showCorrection(
@@ -839,9 +671,9 @@ function handlePracticeModeResponse(userText, reply) {
       parsed.correctness || "wrong"
     );
 
-    speak(parsed.reply);
+    speak(parsed.reply || "Good try! Keep practicing.");
   } catch (parseError) {
-    console.error("Parse error:", parseError);
+    log("⚠️ JSON parse failed, using raw reply");
     conversationHistory.push({ role: "assistant", content: reply });
     saveConversationHistory();
     speak(cleanMarkdown(reply));
@@ -849,6 +681,8 @@ function handlePracticeModeResponse(userText, reply) {
 }
 
 function handleCasualModeResponse(reply) {
+  log(`💬 Casual response: ${reply.substring(0, 100)}`);
+  
   conversationHistory.push({ role: "assistant", content: reply });
   saveConversationHistory();
   speak(cleanMarkdown(reply));
@@ -858,7 +692,7 @@ function handleCasualModeResponse(reply) {
 // AVATAR SWITCHING
 // ============================================
 async function switchAvatar(avatarPath) {
-  log(`🔄 Switching avatar to: ${avatarPath}`);
+  log(`🔄 Switching avatar: ${avatarPath}`);
   currentAvatarPath = avatarPath;
   saveAvatarChoice(avatarPath);
   
@@ -866,17 +700,13 @@ async function switchAvatar(avatarPath) {
     await loadVRMAvatar(avatarPath);
     log("✅ Avatar loaded!");
   } catch (err) {
-    console.error("Avatar load failed:", err);
-    log("❌ Avatar failed: " + err.message);
-    
+    log(`❌ Avatar failed: ${err.message}`);
     if (avatarPath !== "/assets/vrmavatar1.vrm") {
       try {
         await loadVRMAvatar("/assets/vrmavatar1.vrm");
         currentAvatarPath = "/assets/vrmavatar1.vrm";
         saveAvatarChoice(currentAvatarPath);
-      } catch (e) {
-        log("❌ Default avatar also failed");
-      }
+      } catch (e) {}
     }
   }
 }
@@ -885,136 +715,93 @@ async function switchAvatar(avatarPath) {
 // EVENT LISTENERS
 // ============================================
 
-// Menu toggle
-if (menuToggle) {
-  menuToggle.addEventListener("click", () => {
-    menuPanel?.classList.add("active");
-    menuOverlay?.classList.add("active");
-  });
-}
+// Menu
+menuToggle?.addEventListener("click", () => {
+  menuPanel?.classList.add("active");
+  menuOverlay?.classList.add("active");
+});
 
-if (menuClose) {
-  menuClose.addEventListener("click", () => {
-    menuPanel?.classList.remove("active");
-    menuOverlay?.classList.remove("active");
-  });
-}
+menuClose?.addEventListener("click", () => {
+  menuPanel?.classList.remove("active");
+  menuOverlay?.classList.remove("active");
+});
 
-if (menuOverlay) {
-  menuOverlay.addEventListener("click", () => {
-    menuPanel?.classList.remove("active");
-    menuOverlay?.classList.remove("active");
-  });
-}
+menuOverlay?.addEventListener("click", () => {
+  menuPanel?.classList.remove("active");
+  menuOverlay?.classList.remove("active");
+});
 
 // Mode toggle
-if (modeToggle) {
-  modeToggle.addEventListener("click", () => {
-    isPracticeMode = !isPracticeMode;
-    modeToggle.classList.toggle("active", isPracticeMode);
+modeToggle?.addEventListener("click", () => {
+  isPracticeMode = !isPracticeMode;
+  modeToggle.classList.toggle("active", isPracticeMode);
+  const label = modeToggle.querySelector(".mode-label");
+  if (label) label.textContent = isPracticeMode ? "Practice Mode" : "Casual Chat";
+  hideCorrection();
+  log(isPracticeMode ? "📝 Practice Mode" : "💬 Casual Chat");
+});
 
-    const label = modeToggle.querySelector(".mode-label");
-    if (label) {
-      label.textContent = isPracticeMode ? "Practice Mode" : "Casual Chat";
-    }
-
-    hideCorrection();
-    log(isPracticeMode ? "📝 Practice Mode" : "💬 Casual Chat");
-  });
-}
-
-// Music toggle
-if (musicToggle) {
-  musicToggle.addEventListener("click", (e) => {
-    e.preventDefault();
-    toggleMusic();
-  });
-}
-
-if (musicVolumeSlider) {
-  musicVolumeSlider.addEventListener("input", (e) => {
-    setMusicVolume(e.target.value / 100);
-  });
-}
+// Music
+musicToggle?.addEventListener("click", (e) => { e.preventDefault(); toggleMusic(); });
+musicVolumeSlider?.addEventListener("input", (e) => setMusicVolume(e.target.value / 100));
 
 // Microphone button
-if (micBtn) {
-  micBtn.addEventListener("click", () => {
-    if (isContinuousMode) {
-      // Stop
-      isContinuousMode = false;
-      stopListening();
-      stopSpeech();
-      if (streamController) {
-        streamController.abort();
-        streamController = null;
-      }
-      isListening = false;
-      isStreaming = false;
-
-      micBtn.classList.remove("active");
-      micBtn.textContent = "🎤";
-      setStatus("Paused 💭", "paused");
-      log("⏸️ Paused");
-    } else {
-      // Start
-      isContinuousMode = true;
-      micBtn.classList.add("active");
-      micBtn.textContent = "⏸️";
-      setStatus("Listening... 👂", "listening");
-      log("▶️ Started");
-      startNextListeningCycle();
-    }
-  });
-}
+micBtn?.addEventListener("click", () => {
+  if (isContinuousMode) {
+    // Stop
+    isContinuousMode = false;
+    stopListening();
+    stopSpeech();
+    streamController?.abort();
+    isListening = false;
+    isStreaming = false;
+    micBtn.classList.remove("active");
+    micBtn.textContent = "🎤";
+    setStatus("Paused 💭", "ready");
+    log("⏸️ Stopped");
+  } else {
+    // Start
+    isContinuousMode = true;
+    micBtn.classList.add("active");
+    micBtn.textContent = "⏸️";
+    setStatus("Listening... 👂", "listening");
+    log("▶️ Started");
+    startNextListeningCycle();
+  }
+});
 
 // Clear conversation
-if (clearBtn) {
-  clearBtn.addEventListener("click", () => {
-    if (!confirm("Start fresh? This clears history.")) return;
-
-    clearConversationStorage();
-    stopSpeech();
-    hideCaptionText();
-    hideCorrection();
-
-    setStatus("Fresh start! 🌟", "fresh");
-    log("🔄 Fresh start");
-
-    menuPanel?.classList.remove("active");
-    menuOverlay?.classList.remove("active");
-  });
-}
+clearBtn?.addEventListener("click", () => {
+  if (!confirm("Start fresh?")) return;
+  clearConversationStorage();
+  stopSpeech();
+  hideCaptionText();
+  hideCorrection();
+  setStatus("Fresh start! 🌟", "ready");
+  menuPanel?.classList.remove("active");
+  menuOverlay?.classList.remove("active");
+});
 
 // Demo lesson
-if (demoLessonBtn) {
-  demoLessonBtn.addEventListener("click", () => {
-    const challenges = [
-      "Tell me about something fun you did recently!",
-      "What's your favorite thing to do on weekends?",
-      "If you could learn any skill, what would it be?",
-      "Tell me about a friend who's important to you.",
-      "What's your favorite movie right now?",
-      "Describe your perfect day!",
-      "What's something new you learned lately?",
-      "If you could travel anywhere, where would you go?",
-    ];
-
-    const challenge = challenges[Math.floor(Math.random() * challenges.length)];
-    log(`✨ Challenge: "${challenge}"`);
-    speak(challenge);
-
-    menuPanel?.classList.remove("active");
-    menuOverlay?.classList.remove("active");
-  });
-}
+demoLessonBtn?.addEventListener("click", () => {
+  const challenges = [
+    "Tell me about something fun you did recently!",
+    "What's your favorite thing to do on weekends?",
+    "If you could learn any skill, what would it be?",
+    "Describe your perfect day!",
+  ];
+  const challenge = challenges[Math.floor(Math.random() * challenges.length)];
+  log(`✨ Challenge: "${challenge}"`);
+  speak(challenge);
+  menuPanel?.classList.remove("active");
+  menuOverlay?.classList.remove("active");
+});
 
 // Avatar selection
 avatarOptions.forEach(btn => {
   btn.addEventListener("click", () => {
     avatarOptions.forEach(b => b.classList.remove("active"));
     btn.classList.add("active");
-    
     const avatarPath = btn.dataset.avatar;
     if (avatarPath && avatarPath !== currentAvatarPath) {
       switchAvatar(avatarPath);
@@ -1026,7 +813,10 @@ avatarOptions.forEach(btn => {
 // INITIALIZATION
 // ============================================
 async function initialize() {
-  log("🚀 Initializing (Low Latency Mode)...");
+  log("🚀 Initializing...");
+  log(`📡 API URL: ${API_URL}`);
+  log(`📡 Stream URL: ${API_STREAM_URL}`);
+  log(`🔄 Streaming enabled: ${STREAM_CONFIG.useStreaming}`);
 
   currentAvatarPath = loadAvatarChoice();
 
@@ -1070,14 +860,15 @@ async function initialize() {
 
   // Load history
   const hasHistory = loadConversationHistory();
-  setStatus(hasHistory ? "Welcome back! 😊" : "Ready to chat! 💭", hasHistory ? "welcome" : "ready");
+  setStatus(hasHistory ? "Welcome back! 😊" : "Ready to chat! 💭", "ready");
 
   // Load voices
   if (window.speechSynthesis) {
     const loadVoices = () => {
       const voices = window.speechSynthesis.getVoices();
-      log(`🔊 ${voices.length} voices loaded`);
+      log(`🔊 ${voices.length} voices available`);
     };
+    
     if (window.speechSynthesis.getVoices().length > 0) {
       loadVoices();
     } else {
@@ -1086,7 +877,7 @@ async function initialize() {
   }
 
   // Request mic permission
-  if (IS_MOBILE && navigator.mediaDevices?.getUserMedia) {
+  if (navigator.mediaDevices?.getUserMedia) {
     try {
       await navigator.mediaDevices.getUserMedia({ audio: true });
       log("✅ Mic permission granted");
@@ -1095,7 +886,13 @@ async function initialize() {
     }
   }
 
-  log("✅ Ready! (Streaming: " + STREAM_CONFIG.useStreaming + ")");
+  log("✅ Ready!");
+  
+  // Test speech synthesis
+  log("🔊 Testing speech synthesis...");
+  setTimeout(() => {
+    speak("Hello! I'm ready to chat with you.");
+  }, 1000);
 }
 
 // Start
@@ -1106,14 +903,8 @@ if (document.readyState === "loading") {
 }
 
 // Cleanup
-document.addEventListener("visibilitychange", () => {
-  if (document.hidden && isSpeaking) {
-    stopSpeech();
-  }
-});
-
 window.addEventListener("beforeunload", () => {
   stopSpeech();
-  if (streamController) streamController.abort();
+  streamController?.abort();
   if (isListening) stopListening();
 });
