@@ -771,3 +771,62 @@ input:focus-visible {
     display: none;
   }
 }
+
+/* Add this to your style.css file */
+
+/* ============================================
+   TAGLINE TEXT (top-left)
+   ============================================ */
+.tagline {
+  position: fixed;
+  top: 20px;
+  left: 20px;
+  z-index: 50;
+  
+  color: white;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+}
+
+.tagline-main {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.tagline-sub {
+  font-size: 14px;
+  font-weight: 500;
+  opacity: 0.9;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .tagline {
+    top: 16px;
+    left: 16px;
+  }
+  
+  .tagline-main {
+    font-size: 16px;
+  }
+  
+  .tagline-sub {
+    font-size: 13px;
+  }
+}
+
+@media (max-width: 480px) {
+  .tagline {
+    top: 12px;
+    left: 12px;
+  }
+  
+  .tagline-main {
+    font-size: 14px;
+  }
+  
+  .tagline-sub {
+    font-size: 12px;
+  }
+}
