@@ -75,7 +75,7 @@ const CONFIG = {
   avatarZ: 0.5,
   
   // ===== ROOM =====
-  roomScale: 1.3,
+  roomScale: 1.0,
   roomX: 0,
   roomY: 0,
   roomZ: -2,
