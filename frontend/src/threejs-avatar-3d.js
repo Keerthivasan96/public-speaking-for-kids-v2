@@ -75,9 +75,9 @@ const CONFIG = {
   avatarZ: 0.5,
   
   // ===== ROOM =====
-  roomScale: 1.0,
+  roomScale: 1.1,
   roomX: 0,
-  roomY: 0,
+  roomY: -0.2,
   roomZ: -2,
   
   // ===== ELEGANT COLOR THEME =====
