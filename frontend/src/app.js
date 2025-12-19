@@ -924,7 +924,7 @@ async function initialize() {
   // Try to load room first (default environment)
   try {
     log("🏠 Loading room environment...");
-    await loadRoomModel("/assets/room/room.glb");
+    await loadRoomModel("/assets/room/room1.glb");
     log("🏠 Room loaded successfully!");
   } catch (err) {
     log("🏠 Room not found - using fallback sky/ground");
