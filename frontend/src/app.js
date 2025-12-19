@@ -1,6 +1,6 @@
 // ============================================
-// app.js - COMPLETE VERSION
-// Room loads by default, all features included
+// app.js - LOW LATENCY STREAMING VERSION
+// Streams LLM response + speaks in chunks
 // ============================================
 
 import { startListening, stopListening } from "./speech.js";
@@ -16,8 +16,12 @@ import {
   setSkyColors
 } from "./threejs-avatar-3d.js";
 
-// Backend API URL
+// ============================================
+// API CONFIGURATION
+// ============================================
+// Streaming endpoint (you'll need to update your backend)
 const API_URL = "https://public-speaking-for-kids-backend-v2.vercel.app/api/generate";
+const API_STREAM_URL = "https://public-speaking-for-kids-backend-v2.vercel.app/api/stream";
 
 // ============================================
 // DEVICE DETECTION
@@ -61,6 +65,13 @@ let conversationHistory = [];
 let isPracticeMode = false;
 let speechBuffer = "";
 
+// Streaming state
+let isStreaming = false;
+let streamController = null;
+let speechQueue = [];
+let currentUtterance = null;
+let fullResponseText = "";
+
 // Avatar state
 let currentAvatarPath = "/assets/vrmavatar1.vrm";
 
@@ -68,6 +79,20 @@ let currentAvatarPath = "/assets/vrmavatar1.vrm";
 let backgroundMusic = null;
 let isMusicPlaying = false;
 let musicVolume = 0.3;
+
+// ============================================
+// STREAMING CONFIGURATION
+// ============================================
+const STREAM_CONFIG = {
+  // Minimum characters before speaking first chunk
+  minCharsToSpeak: 15,
+  // Characters to look for sentence breaks
+  sentenceBreaks: ['.', '!', '?', ',', ';', ':'],
+  // Use streaming (set to false to use regular API)
+  useStreaming: true,
+  // Speak as sentences complete (true) or word by word (false)
+  speakBySentence: true,
+};
 
 // ============================================
 // STORAGE KEYS
@@ -178,20 +203,16 @@ function loadMusicVolume() {
 function initMusic() {
   log("🎵 Initializing music system...");
   
-  // Create audio element
   backgroundMusic = document.createElement("audio");
   backgroundMusic.loop = true;
   backgroundMusic.preload = "auto";
   
-  // Load saved volume
   musicVolume = loadMusicVolume();
   backgroundMusic.volume = musicVolume;
   
-  // Try multiple music file paths
   const musicFiles = [
     "/assets/music/ambient.mp3",
     "/assets/music/ambient1.mp3",
-    "/assets/music/ambient2.mp3",
     "/assets/music/background.mp3",
     "/assets/music/lofi.mp3",
     "/assets/music/music.mp3"
@@ -201,38 +222,27 @@ function initMusic() {
   
   function tryNextMusicFile() {
     if (currentFileIndex >= musicFiles.length) {
-      log("🎵 No music files found in /assets/music/");
+      log("🎵 No music files found");
       return;
     }
-    
-    const filePath = musicFiles[currentFileIndex];
-    log(`🎵 Trying: ${filePath}`);
-    backgroundMusic.src = filePath;
+    backgroundMusic.src = musicFiles[currentFileIndex];
     currentFileIndex++;
   }
   
-  backgroundMusic.addEventListener("error", () => {
-    tryNextMusicFile();
-  });
-  
+  backgroundMusic.addEventListener("error", tryNextMusicFile);
   backgroundMusic.addEventListener("canplaythrough", () => {
-    log("🎵 Music file loaded and ready!");
+    log("🎵 Music ready!");
   });
   
-  // Start trying to load music
   tryNextMusicFile();
   
-  // Update volume slider if exists
   if (musicVolumeSlider) {
     musicVolumeSlider.value = musicVolume * 100;
   }
 }
 
 function playMusic() {
-  if (!backgroundMusic || !backgroundMusic.src) {
-    log("🎵 No music source available");
-    return;
-  }
+  if (!backgroundMusic || !backgroundMusic.src) return;
   
   backgroundMusic.play()
     .then(() => {
@@ -241,61 +251,40 @@ function playMusic() {
       updateMusicToggleUI();
       log("🎵 Music playing");
     })
-    .catch(err => {
-      log("🎵 Playback blocked: " + err.message);
-      // Will work after user interaction
-    });
+    .catch(err => log("🎵 Playback blocked: " + err.message));
 }
 
 function pauseMusic() {
   if (!backgroundMusic) return;
-  
   backgroundMusic.pause();
   isMusicPlaying = false;
   saveMusicState(false);
   updateMusicToggleUI();
-  log("🔇 Music paused");
 }
 
 function toggleMusic() {
-  if (isMusicPlaying) {
-    pauseMusic();
-  } else {
-    playMusic();
-  }
+  isMusicPlaying ? pauseMusic() : playMusic();
 }
 
 function setMusicVolume(volume) {
   musicVolume = Math.max(0, Math.min(1, volume));
-  if (backgroundMusic) {
-    backgroundMusic.volume = musicVolume;
-  }
+  if (backgroundMusic) backgroundMusic.volume = musicVolume;
   saveMusicVolume(musicVolume);
 }
 
 function updateMusicToggleUI() {
   if (!musicToggle) return;
-  
-  if (isMusicPlaying) {
-    musicToggle.classList.add("active");
-  } else {
-    musicToggle.classList.remove("active");
-  }
-  
+  musicToggle.classList.toggle("active", isMusicPlaying);
   const label = musicToggle.querySelector(".mode-label");
-  if (label) {
-    label.textContent = isMusicPlaying ? "Music On 🎵" : "Music Off";
-  }
+  if (label) label.textContent = isMusicPlaying ? "Music On 🎵" : "Music Off";
 }
 
-// Lower music volume during speech
 function lowerMusicForSpeech() {
   if (backgroundMusic && isMusicPlaying) {
-    backgroundMusic.volume = musicVolume * 0.2;
+    backgroundMusic.volume = musicVolume * 0.15;
   }
 }
 
-// Restore music volume after speech
 function restoreMusicVolume() {
   if (backgroundMusic && isMusicPlaying) {
     backgroundMusic.volume = musicVolume;
@@ -309,6 +298,11 @@ function showCaptionText(text) {
   if (!chatCaption) return;
   chatCaption.textContent = text;
   chatCaption.classList.add("active");
+}
+
+function updateCaptionText(text) {
+  if (!chatCaption) return;
+  chatCaption.textContent = text;
 }
 
 function hideCaptionText() {
@@ -343,7 +337,7 @@ function showCorrection(userText, correctedText, explanation, correctness) {
       statusText = "Let's improve";
   }
 
-  const html = `
+  correctionContent.innerHTML = `
     <div class="${statusClass}">
       <div class="correction-display-header">
         <span>${statusIcon}</span>
@@ -370,15 +364,11 @@ function showCorrection(userText, correctedText, explanation, correctness) {
       </div>
     </div>
   `;
-
-  correctionContent.innerHTML = html;
   correctionDisplay.style.display = "block";
 }
 
 function hideCorrection() {
-  if (correctionDisplay) {
-    correctionDisplay.style.display = "none";
-  }
+  if (correctionDisplay) correctionDisplay.style.display = "none";
 }
 
 // ============================================
@@ -392,6 +382,7 @@ function setStatus(message, type = "") {
     listening: "Listening... 👂",
     thinking: "Thinking... 💭",
     speaking: "Speaking... 💬",
+    streaming: "Responding... ✨",
     error: "Oops! Something went wrong 😅",
     paused: "Paused 💭",
     welcome: "Welcome back! 😊",
@@ -413,24 +404,17 @@ function escapeHtml(text) {
 function cleanMarkdown(text) {
   if (!text) return "";
   
-  // Use marked if available
   if (typeof marked !== "undefined" && marked.parse) {
     const html = marked.parse(text);
-    // Sanitize with DOMPurify if available
     const safe = (typeof DOMPurify !== "undefined" && DOMPurify.sanitize) 
       ? DOMPurify.sanitize(html) 
       : html;
-    // Extract text content
     const div = document.createElement("div");
     div.innerHTML = safe;
     return (div.textContent || div.innerText || "").replace(/\s+/g, " ").trim();
   }
   
-  // Fallback: strip markdown characters
-  return text
-    .replace(/[*_~`#\[\]]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
+  return text.replace(/[*_~`#\[\]]/g, "").replace(/\s+/g, " ").trim();
 }
 
 // ============================================
@@ -438,51 +422,33 @@ function cleanMarkdown(text) {
 // ============================================
 function buildPrompt(userText) {
   if (isPracticeMode) {
-    return `You are a friendly English learning companion (age 16-17, warm and supportive).
+    return `You are a friendly English learning companion.
 
 TASK: Analyze this sentence for grammar and spelling errors.
 
 Student said: "${userText}"
 
-Respond in this EXACT JSON format (no markdown, no code blocks):
+Respond in this EXACT JSON format:
 {
   "correctness": "correct" OR "almost" OR "wrong",
-  "corrected": "the corrected sentence here",
-  "explanation": "brief explanation of the error (under 20 words)",
-  "reply": "an encouraging response to the student (1-2 sentences)"
-}
-
-Rules:
-- If the sentence is perfect: correctness="correct"
-- If there are minor errors (1-2 small mistakes): correctness="almost"
-- If there are major errors: correctness="wrong"
-- Always be encouraging and supportive
-- Keep explanation brief and clear`;
+  "corrected": "the corrected sentence",
+  "explanation": "brief explanation (under 15 words)",
+  "reply": "encouraging response (1 sentence)"
+}`;
   }
   
-  // Casual conversation mode
-  const personality = `You're a friendly 16-17 year old English companion. You're warm, supportive, and genuinely interested in the student.
+  const personality = `You're a friendly 16-17 year old English companion. Be warm, natural, and concise. No catchphrases.`;
 
-Your personality:
-- Cheerful and encouraging
-- Natural and conversational (not robotic)
-- Show genuine interest with follow-up questions sometimes
-- Age-appropriate for 13-15 year old students
-- No catchphrases or repetitive patterns
-- Mix short and slightly longer responses naturally`;
-
-  // Build conversation context
-  const recentHistory = conversationHistory.slice(-15).map(msg => 
+  const recentHistory = conversationHistory.slice(-10).map(msg => 
     `${msg.role === "user" ? "Student" : "You"}: ${msg.content}`
   ).join("\n");
 
   return `${personality}
 
-${recentHistory ? `Recent conversation:\n${recentHistory}\n` : "(This is the start of the conversation)"}
-
+${recentHistory ? `Recent:\n${recentHistory}\n` : ""}
 Student: "${userText}"
 
-Respond naturally in 1-3 sentences (about 30-60 words). Be warm and engaging!`;
+Respond naturally in 1-2 sentences (20-40 words max). Be warm!`;
 }
 
 // ============================================
@@ -492,114 +458,120 @@ function selectBestVoice() {
   const voices = window.speechSynthesis.getVoices();
   if (!voices || voices.length === 0) return null;
 
-  // Preferred voices in order
   const preferredVoices = [
     "Google US English Female",
-    "Google UK English Female",
+    "Google UK English Female", 
     "Microsoft Zira",
     "Samantha",
     "Karen",
-    "Victoria",
-    "Fiona"
+    "Victoria"
   ];
 
-  // Try to find preferred voice
   for (const name of preferredVoices) {
     const found = voices.find(v => v.name.includes(name));
     if (found) return found;
   }
 
-  // Look for any female English voice
   const femaleVoice = voices.find(v => 
     (v.lang.startsWith("en-US") || v.lang.startsWith("en-GB")) &&
     /female|woman|girl/i.test(v.name)
   );
   if (femaleVoice) return femaleVoice;
 
-  // Any English voice
-  const englishVoice = voices.find(v => v.lang.startsWith("en"));
-  return englishVoice || voices[0];
+  return voices.find(v => v.lang.startsWith("en")) || voices[0];
 }
 
 // ============================================
-// TEXT-TO-SPEECH
+// STREAMING TEXT-TO-SPEECH
 // ============================================
-function speak(text) {
-  if (!text || !text.trim()) return;
 
-  // Stop any current speech
-  stopSpeech();
+// Queue system for speaking chunks
+function speakChunk(text, isLast = false) {
+  if (!text || !text.trim()) {
+    if (isLast) finishSpeaking();
+    return;
+  }
 
-  // Clean the text
   const cleanText = cleanMarkdown(text);
-  lastSpokenText = cleanText;
-
-  // Create utterance
+  
   const utterance = new SpeechSynthesisUtterance(cleanText);
   utterance.lang = "en-US";
   utterance.volume = 1.0;
+  utterance.rate = IS_MOBILE ? (IS_ANDROID ? 0.9 : 0.92) : 1.0;
+  utterance.pitch = IS_MOBILE ? (IS_ANDROID ? 1.1 : 1.12) : 1.15;
   
-  // Adjust rate and pitch for device
-  if (IS_MOBILE) {
-    utterance.rate = IS_ANDROID ? 0.85 : 0.88;
-    utterance.pitch = IS_ANDROID ? 1.12 : 1.15;
-  } else {
-    utterance.rate = 0.95;
-    utterance.pitch = 1.2;
-  }
-
-  // Set voice
   const voice = selectBestVoice();
   if (voice) utterance.voice = voice;
 
-  // Event handlers
   utterance.onstart = () => {
-    isSpeaking = true;
-    avatarStartTalking();
-    showCaptionText(cleanText);
-    setStatus("Speaking... 💬", "speaking");
-    lowerMusicForSpeech();
+    if (!isSpeaking) {
+      isSpeaking = true;
+      avatarStartTalking();
+      lowerMusicForSpeech();
+    }
   };
 
   utterance.onend = () => {
-    isSpeaking = false;
-    avatarStopTalking();
-    hideCaptionText();
-    restoreMusicVolume();
+    // Process next chunk in queue
+    if (speechQueue.length > 0) {
+      const next = speechQueue.shift();
+      speakChunk(next.text, next.isLast);
+    } else if (isLast) {
+      finishSpeaking();
+    }
+  };
 
-    if (isContinuousMode) {
-      const delay = IS_MOBILE ? 1200 : 800;
-      setTimeout(startNextListeningCycle, delay);
+  utterance.onerror = (e) => {
+    console.error("Speech error:", e);
+    if (speechQueue.length > 0) {
+      const next = speechQueue.shift();
+      speakChunk(next.text, next.isLast);
     } else {
-      setStatus("Your turn! 💭", "ready");
+      finishSpeaking();
     }
   };
 
-  utterance.onerror = (event) => {
-    console.error("Speech error:", event);
-    isSpeaking = false;
-    avatarStopTalking();
-    hideCaptionText();
-    restoreMusicVolume();
-    
-    if (isContinuousMode) {
-      setTimeout(startNextListeningCycle, 1500);
-    }
-  };
+  currentUtterance = utterance;
+  window.speechSynthesis.speak(utterance);
+}
 
-  // Cancel any existing speech and speak
-  try {
-    window.speechSynthesis.cancel();
-  } catch (e) {}
-
-  // Mobile needs a slight delay
-  if (IS_MOBILE) {
-    setTimeout(() => {
-      window.speechSynthesis.speak(utterance);
-    }, 150);
+function queueSpeechChunk(text, isLast = false) {
+  if (!isSpeaking && speechQueue.length === 0) {
+    // Start speaking immediately
+    speakChunk(text, isLast);
   } else {
-    window.speechSynthesis.speak(utterance);
+    // Queue for later
+    speechQueue.push({ text, isLast });
   }
+}
+
+function finishSpeaking() {
+  isSpeaking = false;
+  avatarStopTalking();
+  hideCaptionText();
+  restoreMusicVolume();
+  speechQueue = [];
+  currentUtterance = null;
+
+  if (isContinuousMode) {
+    const delay = IS_MOBILE ? 800 : 500;
+    setTimeout(startNextListeningCycle, delay);
+  } else {
+    setStatus("Your turn! 💭", "ready");
+  }
+}
+
+// Non-streaming speak (legacy)
+function speak(text) {
+  if (!text || !text.trim()) return;
+  stopSpeech();
+  
+  const cleanText = cleanMarkdown(text);
+  lastSpokenText = cleanText;
+  showCaptionText(cleanText);
+  setStatus("Speaking... 💬", "speaking");
+  
+  queueSpeechChunk(cleanText, true);
 }
 
 function stopSpeech() {
@@ -607,6 +579,8 @@ function stopSpeech() {
     window.speechSynthesis.cancel();
   } catch (e) {}
   
+  speechQueue = [];
+  currentUtterance = null;
   isSpeaking = false;
   avatarStopTalking();
   hideCaptionText();
@@ -617,7 +591,7 @@ function stopSpeech() {
 // SPEECH RECOGNITION
 // ============================================
 function startNextListeningCycle() {
-  if (!isContinuousMode || isSpeaking) return;
+  if (!isContinuousMode || isSpeaking || isStreaming) return;
 
   setStatus("Listening... 👂", "listening");
   isListening = true;
@@ -642,27 +616,181 @@ function handleUserSpeech(text, isFinal = true) {
 
   if (!isFinal) {
     speechBuffer = text;
+    // Show interim text in caption
+    showCaptionText(`You: ${text}...`);
     return;
   }
 
-  // Use buffered text or final text
   const finalText = speechBuffer || text;
   speechBuffer = "";
+  hideCaptionText();
   
-  // Send to backend
   sendToBackend(finalText);
 }
 
 // ============================================
-// BACKEND API
+// STREAMING BACKEND API
 // ============================================
 async function sendToBackend(text) {
   if (!text || !text.trim()) return;
 
-  // Add to history
+  // Stop any ongoing stream
+  if (streamController) {
+    streamController.abort();
+    streamController = null;
+  }
+  stopSpeech();
+
   conversationHistory.push({ role: "user", content: text });
   saveConversationHistory();
 
+  if (STREAM_CONFIG.useStreaming && !isPracticeMode) {
+    await streamFromBackend(text);
+  } else {
+    await fetchFromBackend(text);
+  }
+}
+
+// ============================================
+// STREAMING RESPONSE HANDLER
+// ============================================
+async function streamFromBackend(text) {
+  setStatus("Responding... ✨", "streaming");
+  isStreaming = true;
+  fullResponseText = "";
+  
+  let sentenceBuffer = "";
+  let hasStartedSpeaking = false;
+
+  streamController = new AbortController();
+
+  try {
+    const response = await fetch(API_STREAM_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        prompt: buildPrompt(text),
+        temperature: 0.5,
+        max_tokens: 100,
+        stream: true
+      }),
+      signal: streamController.signal
+    });
+
+    if (!response.ok) {
+      throw new Error(`Stream error: ${response.status}`);
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+
+    while (true) {
+      const { done, value } = await reader.read();
+      
+      if (done) break;
+
+      const chunk = decoder.decode(value, { stream: true });
+      
+      // Parse SSE data
+      const lines = chunk.split('\n');
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const data = line.slice(6);
+          
+          if (data === '[DONE]') {
+            break;
+          }
+
+          try {
+            const parsed = JSON.parse(data);
+            const token = parsed.token || parsed.content || parsed.text || '';
+            
+            if (token) {
+              fullResponseText += token;
+              sentenceBuffer += token;
+              
+              // Update caption with full text so far
+              updateCaptionText(fullResponseText);
+              
+              // Check for sentence break to speak
+              if (STREAM_CONFIG.speakBySentence) {
+                const lastChar = token.trim().slice(-1);
+                if (STREAM_CONFIG.sentenceBreaks.includes(lastChar) && 
+                    sentenceBuffer.length >= STREAM_CONFIG.minCharsToSpeak) {
+                  
+                  if (!hasStartedSpeaking) {
+                    hasStartedSpeaking = true;
+                    showCaptionText(fullResponseText);
+                    avatarStartTalking();
+                    isSpeaking = true;
+                    lowerMusicForSpeech();
+                  }
+                  
+                  queueSpeechChunk(sentenceBuffer.trim(), false);
+                  sentenceBuffer = "";
+                }
+              }
+            }
+          } catch (e) {
+            // Not JSON, might be raw text
+            if (data && data.trim()) {
+              fullResponseText += data;
+              sentenceBuffer += data;
+              updateCaptionText(fullResponseText);
+            }
+          }
+        }
+      }
+    }
+
+    // Speak any remaining text
+    if (sentenceBuffer.trim()) {
+      if (!hasStartedSpeaking) {
+        showCaptionText(fullResponseText);
+        avatarStartTalking();
+        isSpeaking = true;
+        lowerMusicForSpeech();
+      }
+      queueSpeechChunk(sentenceBuffer.trim(), true);
+    } else if (hasStartedSpeaking) {
+      // Mark last queued chunk as final
+      if (speechQueue.length > 0) {
+        speechQueue[speechQueue.length - 1].isLast = true;
+      } else {
+        finishSpeaking();
+      }
+    } else if (fullResponseText.trim()) {
+      // Fallback: speak entire response
+      speak(fullResponseText);
+    }
+
+    // Save to history
+    if (fullResponseText.trim()) {
+      conversationHistory.push({ role: "assistant", content: fullResponseText });
+      saveConversationHistory();
+    }
+
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      log("⏹️ Stream aborted");
+    } else {
+      console.error("Stream error:", err);
+      log("❌ Stream error: " + err.message);
+      
+      // Fallback to non-streaming
+      log("🔄 Falling back to non-streaming...");
+      await fetchFromBackend(text);
+    }
+  } finally {
+    isStreaming = false;
+    streamController = null;
+  }
+}
+
+// ============================================
+// NON-STREAMING FALLBACK
+// ============================================
+async function fetchFromBackend(text) {
   setStatus("Thinking... 💭", "thinking");
 
   try {
@@ -692,21 +820,18 @@ async function sendToBackend(text) {
     console.error("Backend error:", err);
     log("❌ Backend error: " + err.message);
     setStatus("Oops! 😅", "error");
-    speak("Sorry, I lost connection for a moment. Can you try again?");
+    speak("Sorry, I had a connection issue. Can you try again?");
   }
 }
 
 function handlePracticeModeResponse(userText, reply) {
   try {
-    // Clean JSON from markdown code blocks
     const cleanedReply = reply.replace(/```json\n?|\n?```/g, "").trim();
     const parsed = JSON.parse(cleanedReply);
 
-    // Add to history
     conversationHistory.push({ role: "assistant", content: parsed.reply });
     saveConversationHistory();
 
-    // Show correction
     showCorrection(
       userText, 
       parsed.corrected || userText, 
@@ -714,11 +839,9 @@ function handlePracticeModeResponse(userText, reply) {
       parsed.correctness || "wrong"
     );
 
-    // Speak the reply
     speak(parsed.reply);
   } catch (parseError) {
-    console.error("Failed to parse practice mode response:", parseError);
-    // Fallback: just speak the raw reply
+    console.error("Parse error:", parseError);
     conversationHistory.push({ role: "assistant", content: reply });
     saveConversationHistory();
     speak(cleanMarkdown(reply));
@@ -741,19 +864,17 @@ async function switchAvatar(avatarPath) {
   
   try {
     await loadVRMAvatar(avatarPath);
-    log("✅ Avatar loaded successfully!");
+    log("✅ Avatar loaded!");
   } catch (err) {
-    console.error("Failed to load avatar:", err);
-    log("❌ Avatar load failed: " + err.message);
+    console.error("Avatar load failed:", err);
+    log("❌ Avatar failed: " + err.message);
     
-    // Try default avatar as fallback
     if (avatarPath !== "/assets/vrmavatar1.vrm") {
-      log("🔄 Trying default avatar...");
       try {
         await loadVRMAvatar("/assets/vrmavatar1.vrm");
         currentAvatarPath = "/assets/vrmavatar1.vrm";
         saveAvatarChoice(currentAvatarPath);
-      } catch (fallbackErr) {
+      } catch (e) {
         log("❌ Default avatar also failed");
       }
     }
@@ -786,7 +907,7 @@ if (menuOverlay) {
   });
 }
 
-// Practice mode toggle
+// Mode toggle
 if (modeToggle) {
   modeToggle.addEventListener("click", () => {
     isPracticeMode = !isPracticeMode;
@@ -798,7 +919,7 @@ if (modeToggle) {
     }
 
     hideCorrection();
-    log(isPracticeMode ? "📝 Switched to Practice Mode" : "💬 Switched to Casual Chat");
+    log(isPracticeMode ? "📝 Practice Mode" : "💬 Casual Chat");
   });
 }
 
@@ -806,12 +927,10 @@ if (modeToggle) {
 if (musicToggle) {
   musicToggle.addEventListener("click", (e) => {
     e.preventDefault();
-    e.stopPropagation();
     toggleMusic();
   });
 }
 
-// Music volume slider
 if (musicVolumeSlider) {
   musicVolumeSlider.addEventListener("input", (e) => {
     setMusicVolume(e.target.value / 100);
@@ -822,34 +941,37 @@ if (musicVolumeSlider) {
 if (micBtn) {
   micBtn.addEventListener("click", () => {
     if (isContinuousMode) {
-      // Stop listening
+      // Stop
       isContinuousMode = false;
       stopListening();
       stopSpeech();
+      if (streamController) {
+        streamController.abort();
+        streamController = null;
+      }
       isListening = false;
+      isStreaming = false;
 
       micBtn.classList.remove("active");
       micBtn.textContent = "🎤";
       setStatus("Paused 💭", "paused");
-      log("⏸️ Conversation paused");
+      log("⏸️ Paused");
     } else {
-      // Start listening
+      // Start
       isContinuousMode = true;
       micBtn.classList.add("active");
       micBtn.textContent = "⏸️";
       setStatus("Listening... 👂", "listening");
-      log("▶️ Conversation started");
+      log("▶️ Started");
       startNextListeningCycle();
     }
   });
 }
 
-// Clear conversation button
+// Clear conversation
 if (clearBtn) {
   clearBtn.addEventListener("click", () => {
-    if (!confirm("Start a fresh conversation? This will clear your chat history.")) {
-      return;
-    }
+    if (!confirm("Start fresh? This clears history.")) return;
 
     clearConversationStorage();
     stopSpeech();
@@ -857,33 +979,31 @@ if (clearBtn) {
     hideCorrection();
 
     setStatus("Fresh start! 🌟", "fresh");
-    log("🔄 Started fresh conversation");
+    log("🔄 Fresh start");
 
-    // Close menu
     menuPanel?.classList.remove("active");
     menuOverlay?.classList.remove("active");
   });
 }
 
-// Demo lesson / Daily challenge button
+// Demo lesson
 if (demoLessonBtn) {
   demoLessonBtn.addEventListener("click", () => {
     const challenges = [
-      "Tell me about something that made you smile today!",
-      "What's your favorite hobby and why do you enjoy it?",
-      "If you could learn any skill instantly, what would it be?",
+      "Tell me about something fun you did recently!",
+      "What's your favorite thing to do on weekends?",
+      "If you could learn any skill, what would it be?",
       "Tell me about a friend who's important to you.",
-      "What's your favorite movie or TV show right now?",
-      "Describe your perfect weekend!",
-      "What's something new you learned recently?",
+      "What's your favorite movie right now?",
+      "Describe your perfect day!",
+      "What's something new you learned lately?",
       "If you could travel anywhere, where would you go?",
     ];
 
-    const randomChallenge = challenges[Math.floor(Math.random() * challenges.length)];
-    log(`✨ Daily Challenge: "${randomChallenge}"`);
-    speak(randomChallenge);
+    const challenge = challenges[Math.floor(Math.random() * challenges.length)];
+    log(`✨ Challenge: "${challenge}"`);
+    speak(challenge);
 
-    // Close menu
     menuPanel?.classList.remove("active");
     menuOverlay?.classList.remove("active");
   });
@@ -892,11 +1012,9 @@ if (demoLessonBtn) {
 // Avatar selection
 avatarOptions.forEach(btn => {
   btn.addEventListener("click", () => {
-    // Update UI
     avatarOptions.forEach(b => b.classList.remove("active"));
     btn.classList.add("active");
     
-    // Load new avatar
     const avatarPath = btn.dataset.avatar;
     if (avatarPath && avatarPath !== currentAvatarPath) {
       switchAvatar(avatarPath);
@@ -908,77 +1026,58 @@ avatarOptions.forEach(btn => {
 // INITIALIZATION
 // ============================================
 async function initialize() {
-  log("🚀 Initializing application...");
+  log("🚀 Initializing (Low Latency Mode)...");
 
-  // Load saved avatar choice
   currentAvatarPath = loadAvatarChoice();
-  log(`📦 Saved avatar: ${currentAvatarPath}`);
 
-  // Initialize 3D scene
   const sceneReady = init3DScene("canvas-container");
   if (!sceneReady) {
-    log("❌ Failed to initialize 3D scene!");
+    log("❌ 3D scene failed!");
     return;
   }
 
-  // Try to load room first (default environment)
+  // Load room
   try {
-    log("🏠 Loading room environment...");
     await loadRoomModel("/assets/room/room1.glb");
-    log("🏠 Room loaded successfully!");
+    log("🏠 Room loaded!");
   } catch (err) {
-    log("🏠 Room not found - using fallback sky/ground");
+    log("🏠 Using fallback environment");
     useFallbackEnvironment();
   }
 
-  // Load VRM avatar
+  // Load avatar
   try {
-    log(`👤 Loading avatar: ${currentAvatarPath}`);
     await loadVRMAvatar(currentAvatarPath);
-    log("👤 Avatar loaded successfully!");
+    log("👤 Avatar loaded!");
   } catch (err) {
-    log(`❌ Failed to load avatar: ${err.message}`);
-    
-    // Try default avatar
+    log(`❌ Avatar failed: ${err.message}`);
     if (currentAvatarPath !== "/assets/vrmavatar1.vrm") {
       try {
-        log("👤 Trying default avatar...");
         await loadVRMAvatar("/assets/vrmavatar1.vrm");
         currentAvatarPath = "/assets/vrmavatar1.vrm";
-      } catch (fallbackErr) {
-        log("❌ Default avatar also failed!");
-      }
+      } catch (e) {}
     }
   }
 
-  // Mark active avatar in UI
+  // Mark active avatar
   avatarOptions.forEach(btn => {
-    if (btn.dataset.avatar === currentAvatarPath) {
-      btn.classList.add("active");
-    } else {
-      btn.classList.remove("active");
-    }
+    btn.classList.toggle("active", btn.dataset.avatar === currentAvatarPath);
   });
 
-  // Initialize music
+  // Init music
   initMusic();
   updateMusicToggleUI();
 
-  // Load conversation history
+  // Load history
   const hasHistory = loadConversationHistory();
-  if (hasHistory) {
-    setStatus("Welcome back! 😊", "welcome");
-  } else {
-    setStatus("Ready to chat! 💭", "ready");
-  }
+  setStatus(hasHistory ? "Welcome back! 😊" : "Ready to chat! 💭", hasHistory ? "welcome" : "ready");
 
-  // Load speech synthesis voices
+  // Load voices
   if (window.speechSynthesis) {
     const loadVoices = () => {
       const voices = window.speechSynthesis.getVoices();
-      log(`🔊 Loaded ${voices.length} voices`);
+      log(`🔊 ${voices.length} voices loaded`);
     };
-
     if (window.speechSynthesis.getVoices().length > 0) {
       loadVoices();
     } else {
@@ -986,32 +1085,27 @@ async function initialize() {
     }
   }
 
-  // Request microphone permission on mobile
+  // Request mic permission
   if (IS_MOBILE && navigator.mediaDevices?.getUserMedia) {
     try {
       await navigator.mediaDevices.getUserMedia({ audio: true });
-      log("✅ Microphone permission granted");
+      log("✅ Mic permission granted");
     } catch (err) {
-      log("❌ Microphone permission denied");
-      alert("Please allow microphone access to use voice features.");
+      log("❌ Mic permission denied");
     }
   }
 
-  log("✅ Application ready!");
+  log("✅ Ready! (Streaming: " + STREAM_CONFIG.useStreaming + ")");
 }
 
-// ============================================
-// START APPLICATION
-// ============================================
+// Start
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", initialize);
 } else {
   initialize();
 }
 
-// ============================================
-// CLEANUP HANDLERS
-// ============================================
+// Cleanup
 document.addEventListener("visibilitychange", () => {
   if (document.hidden && isSpeaking) {
     stopSpeech();
@@ -1020,7 +1114,6 @@ document.addEventListener("visibilitychange", () => {
 
 window.addEventListener("beforeunload", () => {
   stopSpeech();
-  if (isListening) {
-    stopListening();
-  }
+  if (streamController) streamController.abort();
+  if (isListening) stopListening();
 });
