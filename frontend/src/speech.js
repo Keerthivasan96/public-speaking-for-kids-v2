@@ -240,7 +240,6 @@ export function startListening(onTextFinal, options = {}) {
       }, 500);
     }
   }
-}
 
 /**
  * Stop listening - CLEAN
