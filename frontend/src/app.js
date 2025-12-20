@@ -1,32 +1,24 @@
 // ============================================
-// app.js - REPLIKA-STYLE COMPANION
-// Fixed for proper responses and low latency
+// app.js - LUNA AI COMPANION
+// Clean Replika-style chat experience
 // ============================================
 
-import { startListening, stopListening } from "./speech.js";
+import { startListening, stopListening, setSpeaking } from "./speech.js";
 import { 
   init3DScene, 
   loadVRMAvatar, 
   avatarStartTalking, 
   avatarStopTalking,
   loadRoomModel,
-  useFallbackEnvironment,
-  setExpression
+  useFallbackEnvironment
 } from "./threejs-avatar-3d.js";
 
 // ============================================
-// API CONFIGURATION
+// CONFIG
 // ============================================
 const API_URL = "https://public-speaking-for-kids-backend-v2.vercel.app/api/generate";
 
-// ============================================
-// DEVICE DETECTION
-// ============================================
-const IS_MOBILE = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-const IS_ANDROID = /Android/i.test(navigator.userAgent);
-
-console.log(`📱 Device: ${IS_MOBILE ? 'Mobile' : 'Desktop'}`);
+const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
 // ============================================
 // UI ELEMENTS
@@ -38,27 +30,19 @@ const menuOverlay = document.getElementById("menuOverlay");
 const menuClose = document.getElementById("menuClose");
 const clearBtn = document.getElementById("clearBtn");
 const demoLessonBtn = document.getElementById("demoLessonBtn");
-const modeToggle = document.getElementById("modeToggle");
 const musicToggle = document.getElementById("musicToggle");
 const musicVolumeSlider = document.getElementById("musicVolume");
-
 const statusEl = document.getElementById("status");
-const logEl = document.getElementById("log");
 const chatCaption = document.getElementById("chatCaption");
-const correctionDisplay = document.getElementById("correctionDisplay");
-const correctionContent = document.getElementById("correctionContent");
-
 const avatarOptions = document.querySelectorAll(".avatar-option");
 
 // ============================================
 // STATE
 // ============================================
-let isListening = false;
+let isRunning = false;
 let isSpeaking = false;
-let isContinuousMode = false;
+let isProcessing = false;  // Prevents double-sends
 let conversationHistory = [];
-let isPracticeMode = false;
-let speechBuffer = "";
 let currentAvatarPath = "/assets/vrmavatar1.vrm";
 
 // Music
@@ -69,30 +53,11 @@ let musicVolume = 0.3;
 // ============================================
 // STORAGE
 // ============================================
-const STORAGE_KEY = "luna_conversation";
+const STORAGE_KEY = "luna_chat";
 const AVATAR_KEY = "luna_avatar";
-const MUSIC_KEY = "luna_music";
-const VOLUME_KEY = "luna_volume";
 
-// ============================================
-// LOGGING
-// ============================================
-function log(msg) {
-  const time = new Date().toLocaleTimeString();
-  console.log(`[${time}] ${msg}`);
-  if (logEl) {
-    logEl.innerHTML += `<span style="color:#888">[${time}]</span> ${msg}<br>`;
-    logEl.scrollTop = logEl.scrollHeight;
-  }
-}
-
-// ============================================
-// STORAGE FUNCTIONS
-// ============================================
 function saveHistory() {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(conversationHistory.slice(-50)));
-  } catch(e) {}
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(conversationHistory.slice(-30))); } catch(e) {}
 }
 
 function loadHistory() {
@@ -100,7 +65,7 @@ function loadHistory() {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       conversationHistory = JSON.parse(saved);
-      log(`📂 Loaded ${conversationHistory.length} messages`);
+      console.log(`📂 Loaded ${conversationHistory.length} messages`);
       return true;
     }
   } catch(e) {}
@@ -110,7 +75,6 @@ function loadHistory() {
 function clearHistory() {
   conversationHistory = [];
   try { localStorage.removeItem(STORAGE_KEY); } catch(e) {}
-  log("🗑️ History cleared");
 }
 
 function saveAvatar(path) {
@@ -130,26 +94,18 @@ function initMusic() {
   backgroundMusic.loop = true;
   backgroundMusic.volume = musicVolume;
   
-  const files = ["/assets/music/ambient.mp3", "/assets/music/ambient1.mp3", "/assets/music/background.mp3"];
+  const files = ["/assets/music/ambient.mp3", "/assets/music/ambient1.mp3"];
   let i = 0;
-  
-  function tryNext() {
-    if (i >= files.length) return;
-    backgroundMusic.src = files[i++];
-  }
-  
+  const tryNext = () => { if (i < files.length) backgroundMusic.src = files[i++]; };
   backgroundMusic.addEventListener("error", tryNext);
-  backgroundMusic.addEventListener("canplaythrough", () => log("🎵 Music ready"));
+  backgroundMusic.addEventListener("canplaythrough", () => console.log("🎵 Music ready"));
   tryNext();
   
   if (musicVolumeSlider) musicVolumeSlider.value = musicVolume * 100;
 }
 
 function playMusic() {
-  backgroundMusic?.play().then(() => {
-    isMusicPlaying = true;
-    updateMusicUI();
-  }).catch(() => {});
+  backgroundMusic?.play().then(() => { isMusicPlaying = true; updateMusicUI(); }).catch(() => {});
 }
 
 function pauseMusic() {
@@ -175,17 +131,17 @@ function restoreMusic() {
 }
 
 // ============================================
-// CAPTION
+// CAPTION - Fixed for smooth display
 // ============================================
 function showCaption(text) {
-  if (chatCaption) {
-    chatCaption.textContent = text;
-    chatCaption.classList.add("active");
-  }
+  if (!chatCaption) return;
+  chatCaption.textContent = text;
+  chatCaption.classList.add("active");
 }
 
 function hideCaption() {
-  if (chatCaption) chatCaption.classList.remove("active");
+  if (!chatCaption) return;
+  chatCaption.classList.remove("active");
 }
 
 // ============================================
@@ -196,143 +152,118 @@ function setStatus(text) {
 }
 
 // ============================================
-// CORRECTION DISPLAY (Practice Mode)
-// ============================================
-function showCorrection(userText, corrected, explanation, status) {
-  if (!correctionContent || !correctionDisplay) return;
-  
-  const isCorrect = status === "correct";
-  const isAlmost = status === "almost";
-  
-  correctionContent.innerHTML = `
-    <div style="padding:12px;background:${isCorrect ? '#e8f5e9' : isAlmost ? '#fff8e1' : '#ffebee'};border-radius:8px;">
-      <div style="font-weight:bold;margin-bottom:8px;">
-        ${isCorrect ? '✅ Perfect!' : isAlmost ? '⚠️ Almost!' : '❌ Let\'s improve'}
-      </div>
-      <div style="margin-bottom:6px;"><b>You said:</b> "${userText}"</div>
-      ${!isCorrect ? `<div style="color:#2e7d32;margin-bottom:6px;"><b>Better:</b> "${corrected}"</div>` : ''}
-      ${explanation ? `<div style="font-size:13px;color:#666;">💡 ${explanation}</div>` : ''}
-    </div>
-  `;
-  correctionDisplay.style.display = "block";
-}
-
-function hideCorrection() {
-  if (correctionDisplay) correctionDisplay.style.display = "none";
-}
-
-// ============================================
-// PROMPT BUILDER - REPLIKA STYLE (CONCISE)
+// PROMPT - Replika Style (Clean & Effective)
 // ============================================
 function buildPrompt(userText) {
-  if (isPracticeMode) {
-    return `You are Luna, a friendly English tutor. Analyze this sentence for grammar.
-
-Student said: "${userText}"
-
-Respond in JSON format only:
-{"correctness":"correct/almost/wrong","corrected":"corrected sentence","explanation":"brief tip","reply":"short encouraging response (1-2 sentences)"}`;
-  }
-
-  // Get recent context (last 3 exchanges only)
+  // Last 3 exchanges for context
   const context = conversationHistory.slice(-6).map(m => 
     `${m.role === "user" ? "User" : "Luna"}: ${m.content}`
   ).join("\n");
 
-  return `You are Luna, a warm AI companion and friend.
+  return `You are Luna — a warm, emotionally present AI companion.
 
-STYLE: Friendly, natural, like texting a close friend. Use contractions.
+Voice: Friendly, caring, like a close friend. Natural and genuine.
+Length: 2-4 sentences, 40-60 words. Complete your thoughts fully.
+Style: Use contractions. Be warm. One follow-up question is nice.
 
-RESPONSE LENGTH: 3-5 short sentences (45 -50 words max). Be concise but warm.
-
-${context ? `Recent chat:\n${context}\n` : ""}
-User: "${userText}"
+${context ? `Chat:\n${context}\n\n` : ""}User: "${userText}"
 
 Luna:`;
 }
 
 // ============================================
-// VOICE SELECTION
+// VOICE
 // ============================================
 function getBestVoice() {
   const voices = window.speechSynthesis.getVoices();
   if (!voices.length) return null;
   
-  // Prefer these voices
-  const preferred = ["Google US English", "Samantha", "Karen", "Victoria", "Zira", "Google UK English Female"];
+  const preferred = ["Google US English", "Samantha", "Karen", "Victoria"];
   for (const name of preferred) {
     const v = voices.find(x => x.name.includes(name));
     if (v) return v;
   }
-  
-  // Any English voice
   return voices.find(v => v.lang.startsWith("en")) || voices[0];
 }
 
 // ============================================
-// SPEAK
+// SPEAK - Clean implementation
 // ============================================
 function speak(text) {
-  if (!text?.trim()) {
-    log("⚠️ Empty text");
-    return;
-  }
+  if (!text?.trim()) return;
 
-  log(`🔊 Speaking: "${text.substring(0, 60)}..."`);
-  
+  // Cancel any existing speech
   window.speechSynthesis.cancel();
   
   const clean = text.replace(/[*_~`#\[\]]/g, "").replace(/\s+/g, " ").trim();
+  
+  console.log(`🔊 Speaking: "${clean.substring(0, 50)}..."`);
+  
+  // Show caption FIRST
   showCaption(clean);
   setStatus("Speaking... 💬");
   
   const utterance = new SpeechSynthesisUtterance(clean);
   utterance.lang = "en-US";
   utterance.volume = 1.0;
-  utterance.rate = IS_MOBILE ? 0.92 : 0.95;
+  utterance.rate = isMobile ? 0.92 : 0.95;
   utterance.pitch = 1.1;
   
   const voice = getBestVoice();
-  if (voice) {
-    utterance.voice = voice;
-    log(`🎤 Voice: ${voice.name}`);
-  }
+  if (voice) utterance.voice = voice;
 
   utterance.onstart = () => {
     isSpeaking = true;
+    setSpeaking(true);
     avatarStartTalking();
     lowerMusic();
   };
 
   utterance.onend = () => {
-    log("🔊 Done speaking");
+    console.log("🔊 Done");
     isSpeaking = false;
+    setSpeaking(false);
     avatarStopTalking();
     hideCaption();
     restoreMusic();
+    isProcessing = false;  // Allow new messages
     
-    if (isContinuousMode) {
-      setTimeout(startListeningCycle, IS_MOBILE ? 800 : 500);
+    if (isRunning) {
+      setStatus("Listening... 👂");
+      setTimeout(() => {
+        if (isRunning && !isSpeaking) {
+          startListeningCycle();
+        }
+      }, isMobile ? 500 : 300);
     } else {
-      setStatus("Your turn! 💭");
+      setStatus("Tap mic to talk 💭");
     }
   };
 
   utterance.onerror = (e) => {
-    log(`❌ Speech error: ${e.error}`);
+    console.log("🔊 Error:", e.error);
     isSpeaking = false;
+    setSpeaking(false);
     avatarStopTalking();
     hideCaption();
     restoreMusic();
-    if (isContinuousMode) setTimeout(startListeningCycle, 1000);
+    isProcessing = false;
+    
+    if (isRunning) {
+      setTimeout(startListeningCycle, 500);
+    }
   };
 
-  setTimeout(() => window.speechSynthesis.speak(utterance), 100);
+  // Small delay for smooth transition
+  setTimeout(() => {
+    window.speechSynthesis.speak(utterance);
+  }, 50);
 }
 
 function stopSpeaking() {
   window.speechSynthesis.cancel();
   isSpeaking = false;
+  setSpeaking(false);
   avatarStopTalking();
   hideCaption();
   restoreMusic();
@@ -342,138 +273,97 @@ function stopSpeaking() {
 // SPEECH RECOGNITION
 // ============================================
 function startListeningCycle() {
-  if (!isContinuousMode || isSpeaking) return;
+  if (!isRunning || isSpeaking || isProcessing) return;
   
   setStatus("Listening... 👂");
-  isListening = true;
-  speechBuffer = "";
   
   startListening(onSpeech, {
-    continuous: false,
-    lang: "en-US",
-    interimResults: true
+    continuous: true,
+    lang: "en-US"
   });
 }
 
 function onSpeech(text, isFinal) {
-  if (!text?.trim()) {
-    if (isContinuousMode && isFinal) setTimeout(startListeningCycle, 400);
-    return;
-  }
-
-  if (!isFinal) {
-    speechBuffer = text;
-    showCaption(`You: ${text}...`);
-    return;
-  }
-
-  const finalText = speechBuffer || text;
-  speechBuffer = "";
-  hideCaption();
-  log(`🎤 You said: "${finalText}"`);
+  if (!text?.trim() || !isFinal) return;
   
-  sendMessage(finalText);
+  // Prevent double processing
+  if (isProcessing) {
+    console.log("⏳ Already processing, skip");
+    return;
+  }
+  
+  console.log(`🎤 You: "${text}"`);
+  sendMessage(text);
 }
 
 // ============================================
-// SEND MESSAGE TO BACKEND
+// SEND MESSAGE
 // ============================================
 async function sendMessage(text) {
   if (!text?.trim()) return;
-
-  stopSpeaking();
+  if (isProcessing) return;  // Guard against double-send
   
+  isProcessing = true;
+  stopSpeaking();
+  stopListening();
+  
+  // Add to history
   conversationHistory.push({ role: "user", content: text });
   saveHistory();
   
   setStatus("Thinking... 💭");
-  log(`📤 Sending: "${text}"`);
+  console.log(`📤 Sending: "${text}"`);
 
   try {
-    const prompt = buildPrompt(text);
-    log(`📝 Prompt: ${prompt.length} chars`);
-
     const response = await fetch(API_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        prompt: prompt,
-        temperature: isPracticeMode ? 0.4 : 0.85,
-        max_tokens: 200,  // Reduced for concise responses
+        prompt: buildPrompt(text),
+        temperature: 0.85,
+        max_tokens: 300,
       }),
     });
 
-    log(`📥 Status: ${response.status}`);
-
-    if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
-    }
+    if (!response.ok) throw new Error(`API error: ${response.status}`);
 
     const data = await response.json();
     const reply = data.reply || data.text || "";
     
-    log(`📥 Reply (${reply.length} chars): "${reply.substring(0, 80)}..."`);
+    console.log(`📥 Reply: "${reply.substring(0, 60)}..."`);
 
     if (!reply || reply.length < 5) {
-      throw new Error("Empty or too short response");
+      throw new Error("Empty response");
     }
 
-    if (isPracticeMode) {
-      handlePracticeResponse(text, reply);
-    } else {
-      handleChatResponse(reply);
-    }
-
-  } catch (err) {
-    log(`❌ Error: ${err.message}`);
-    setStatus("Oops! 😅");
-    speak("Sorry, I had a little trouble there. Could you say that again?");
-  }
-}
-
-function handlePracticeResponse(userText, reply) {
-  try {
-    const cleaned = reply.replace(/```json\n?|\n?```/g, "").trim();
-    const parsed = JSON.parse(cleaned);
-    
-    conversationHistory.push({ role: "assistant", content: parsed.reply || reply });
-    saveHistory();
-    
-    showCorrection(userText, parsed.corrected || userText, parsed.explanation || "", parsed.correctness || "wrong");
-    speak(parsed.reply || "Good try! Keep practicing.");
-  } catch (e) {
-    log("⚠️ Parse failed, using raw");
+    // Add to history
     conversationHistory.push({ role: "assistant", content: reply });
     saveHistory();
+    
+    // Speak reply
     speak(reply);
-  }
-}
 
-function handleChatResponse(reply) {
-  conversationHistory.push({ role: "assistant", content: reply });
-  saveHistory();
-  speak(reply);
+  } catch (err) {
+    console.error("❌ Error:", err.message);
+    isProcessing = false;
+    setStatus("Oops! 😅");
+    speak("Sorry, I had a little trouble there. Can you say that again?");
+  }
 }
 
 // ============================================
 // AVATAR
 // ============================================
 async function switchAvatar(path) {
-  log(`🔄 Loading avatar: ${path}`);
+  console.log(`🔄 Loading: ${path}`);
   currentAvatarPath = path;
   saveAvatar(path);
   
   try {
     await loadVRMAvatar(path);
-    log("✅ Avatar loaded");
+    console.log("✅ Avatar loaded");
   } catch (err) {
-    log(`❌ Avatar failed: ${err.message}`);
-    if (path !== "/assets/vrmavatar1.vrm") {
-      try {
-        await loadVRMAvatar("/assets/vrmavatar1.vrm");
-        currentAvatarPath = "/assets/vrmavatar1.vrm";
-      } catch(e) {}
-    }
+    console.log(`❌ Avatar error: ${err.message}`);
   }
 }
 
@@ -497,16 +387,6 @@ menuOverlay?.addEventListener("click", () => {
   menuOverlay?.classList.remove("active");
 });
 
-// Mode toggle
-modeToggle?.addEventListener("click", () => {
-  isPracticeMode = !isPracticeMode;
-  modeToggle.classList.toggle("active", isPracticeMode);
-  const label = modeToggle.querySelector(".mode-label");
-  if (label) label.textContent = isPracticeMode ? "Practice Mode" : "Chat Mode";
-  hideCorrection();
-  log(isPracticeMode ? "📝 Practice Mode" : "💬 Chat Mode");
-});
-
 // Music
 musicToggle?.addEventListener("click", () => isMusicPlaying ? pauseMusic() : playMusic());
 musicVolumeSlider?.addEventListener("input", (e) => {
@@ -514,48 +394,46 @@ musicVolumeSlider?.addEventListener("input", (e) => {
   if (backgroundMusic) backgroundMusic.volume = musicVolume;
 });
 
-// Microphone
+// Microphone - Main toggle
 micBtn?.addEventListener("click", () => {
-  if (isContinuousMode) {
-    // Stop
-    isContinuousMode = false;
+  if (isRunning) {
+    // STOP
+    isRunning = false;
+    isProcessing = false;
     stopListening();
     stopSpeaking();
-    isListening = false;
     micBtn.classList.remove("active");
     micBtn.textContent = "🎤";
-    setStatus("Paused 💭");
-    log("⏸️ Stopped");
+    setStatus("Tap mic to talk 💭");
+    console.log("⏸️ Stopped");
   } else {
-    // Start
-    isContinuousMode = true;
+    // START
+    isRunning = true;
     micBtn.classList.add("active");
     micBtn.textContent = "⏸️";
-    log("▶️ Started");
+    console.log("▶️ Started");
     startListeningCycle();
   }
 });
 
-// Clear
+// Clear history
 clearBtn?.addEventListener("click", () => {
-  if (!confirm("Start fresh conversation?")) return;
+  if (!confirm("Start fresh?")) return;
   clearHistory();
   stopSpeaking();
   hideCaption();
-  hideCorrection();
   setStatus("Fresh start! 🌟");
   menuPanel?.classList.remove("active");
   menuOverlay?.classList.remove("active");
 });
 
-// Demo
+// Demo prompts
 demoLessonBtn?.addEventListener("click", () => {
   const prompts = [
-    "Tell me about something fun you did recently!",
-    "What's your favorite thing to do on weekends?",
-    "If you could travel anywhere, where would you go?",
-    "What's something that made you smile today?",
-    "Tell me about your favorite movie or show!",
+    "Tell me something interesting about yourself!",
+    "What's a fun memory you have?",
+    "If you could go anywhere, where would it be?",
+    "What made you smile recently?",
   ];
   speak(prompts[Math.floor(Math.random() * prompts.length)]);
   menuPanel?.classList.remove("active");
@@ -576,31 +454,30 @@ avatarOptions.forEach(btn => {
 // INITIALIZE
 // ============================================
 async function init() {
-  log("🚀 Starting Luna...");
+  console.log("🚀 Starting Luna...");
   
   currentAvatarPath = loadAvatar();
   
-  // Init 3D scene
+  // Init 3D
   if (!init3DScene("canvas-container")) {
-    log("❌ 3D failed");
+    console.log("❌ 3D failed");
     return;
   }
 
   // Load room
   try {
     await loadRoomModel("/assets/room/room1.glb");
-    log("🏠 Room loaded");
+    console.log("🏠 Room loaded");
   } catch (e) {
-    log("🏠 Using fallback");
     useFallbackEnvironment();
   }
 
   // Load avatar
   try {
     await loadVRMAvatar(currentAvatarPath);
-    log("👤 Avatar loaded");
+    console.log("👤 Avatar loaded");
   } catch (e) {
-    log(`❌ Avatar error: ${e.message}`);
+    console.log("❌ Avatar error");
   }
 
   // Mark active avatar
@@ -613,36 +490,30 @@ async function init() {
   updateMusicUI();
 
   // Load history
-  const hasHistory = loadHistory();
-  setStatus(hasHistory ? "Welcome back! 😊" : "Ready to chat! 💭");
+  loadHistory();
+  setStatus("Ready to chat! 💭");
 
   // Load voices
-  if (window.speechSynthesis) {
-    const loadVoices = () => {
-      const voices = window.speechSynthesis.getVoices();
-      log(`🔊 ${voices.length} voices`);
+  if (window.speechSynthesis.getVoices().length === 0) {
+    window.speechSynthesis.onvoiceschanged = () => {
+      console.log(`🔊 ${window.speechSynthesis.getVoices().length} voices`);
     };
-    if (window.speechSynthesis.getVoices().length > 0) {
-      loadVoices();
-    } else {
-      window.speechSynthesis.onvoiceschanged = loadVoices;
-    }
   }
 
   // Mic permission
   try {
     await navigator.mediaDevices.getUserMedia({ audio: true });
-    log("✅ Mic ready");
+    console.log("✅ Mic ready");
   } catch (e) {
-    log("❌ Mic denied");
+    console.log("❌ Mic denied");
   }
 
-  log("✅ Ready!");
+  console.log("✅ Ready!");
   
-  // Welcome
+  // Welcome message
   setTimeout(() => {
-    speak("Hey! I'm Luna, your conversation buddy. How's your day going?");
-  }, 1200);
+    speak("Hey! I'm Luna. How's your day going?");
+  }, 1000);
 }
 
 // Start
@@ -655,5 +526,5 @@ if (document.readyState === "loading") {
 // Cleanup
 window.addEventListener("beforeunload", () => {
   stopSpeaking();
-  if (isListening) stopListening();
+  stopListening();
 });
