@@ -599,7 +599,7 @@ async function streamFromBackend(text) {
       body: JSON.stringify({
         prompt: buildPrompt(text),
         temperature: 0.8,
-        max_tokens: 256,  // Increased for proper responses
+        max_tokens: 1000,  // Increased for proper responses
       }),
       signal: streamController.signal
     });
