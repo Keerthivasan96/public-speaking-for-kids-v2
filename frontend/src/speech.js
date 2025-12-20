@@ -18,7 +18,7 @@ const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
 const isAndroid = /Android/i.test(navigator.userAgent);
 
 // MOBILE FIX: Shorter timeout for mobile (they're more sensitive)
-const SILENCE_TIMEOUT = isMobile ? 600 : 850; // Mobile: 1.2s, Desktop: 1.8s
+const SILENCE_TIMEOUT = isMobile ? 600 : 600; // Mobile: 1.2s, Desktop: 1.8s
 
 console.log(`Device: ${isMobile ? 'Mobile' : 'Desktop'} (iOS: ${isIOS}, Android: ${isAndroid})`);
 
