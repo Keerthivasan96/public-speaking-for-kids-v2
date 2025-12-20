@@ -593,7 +593,7 @@ async function fetchFromBackend(text) {
       body: JSON.stringify({
         prompt: prompt,
         temperature: isPracticeMode ? 0.3 : 0.8,
-        max_tokens: isPracticeMode ? 300 : 256,
+        max_tokens: isPracticeMode ? 300 : 150,  // Reduced from 256 for faster responses
       }),
     });
 
