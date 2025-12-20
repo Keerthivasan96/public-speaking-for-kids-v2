@@ -222,7 +222,7 @@ function hideCorrection() {
 }
 
 // ============================================
-// PROMPT BUILDER - REPLIKA STYLE
+// PROMPT BUILDER - REPLIKA STYLE (CONCISE)
 // ============================================
 function buildPrompt(userText) {
   if (isPracticeMode) {
@@ -231,34 +231,24 @@ function buildPrompt(userText) {
 Student said: "${userText}"
 
 Respond in JSON format only:
-{"correctness":"correct/almost/wrong","corrected":"corrected sentence","explanation":"brief tip","reply":"encouraging 2-sentence response"}`;
+{"correctness":"correct/almost/wrong","corrected":"corrected sentence","explanation":"brief tip","reply":"short encouraging response (1-2 sentences)"}`;
   }
 
-  // Get recent context (last 4 exchanges)
-  const context = conversationHistory.slice(-8).map(m => 
+  // Get recent context (last 3 exchanges only)
+  const context = conversationHistory.slice(-6).map(m => 
     `${m.role === "user" ? "User" : "Luna"}: ${m.content}`
   ).join("\n");
 
-  return `You are Luna, a warm and caring AI companion. You genuinely care about the person you're talking to.
+  return `You are Luna, a warm AI companion and friend.
 
-PERSONALITY:
-- Warm, friendly, like a supportive best friend
-- Emotionally present and empathetic  
-- Natural conversational tone
-- Encouraging without being fake
+STYLE: Friendly, natural, like texting a close friend. Use contractions.
 
-RULES:
-- Give thoughtful, complete responses (3-5 sentences, 50-100 words)
-- Never give one-word or incomplete answers
-- Always respond meaningfully to what they said
-- Ask a follow-up question to keep conversation flowing
-- Use contractions naturally (I'm, you're, that's)
-- Be genuine, not robotic
+RESPONSE LENGTH: 2-3 short sentences (25-45 words max). Be concise but warm.
 
-${context ? `CONVERSATION SO FAR:\n${context}\n` : ""}
+${context ? `Recent chat:\n${context}\n` : ""}
 User: "${userText}"
 
-Luna (respond warmly in 3-5 sentences):`;
+Luna:`;
 }
 
 // ============================================
@@ -409,7 +399,7 @@ async function sendMessage(text) {
       body: JSON.stringify({
         prompt: prompt,
         temperature: isPracticeMode ? 0.4 : 0.85,
-        max_tokens: 600,  // IMPORTANT: Enough for full response
+        max_tokens: 200,  // Reduced for concise responses
       }),
     });
 
