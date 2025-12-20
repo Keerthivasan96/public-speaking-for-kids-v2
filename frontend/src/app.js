@@ -334,22 +334,37 @@ function cleanMarkdown(text) {
 // ============================================
 function buildPrompt(userText) {
   if (isPracticeMode) {
-    return `You are a friendly English learning companion.
-TASK: Analyze this sentence for grammar errors.
-Student said: "${userText}"
-Respond in JSON: {"correctness":"correct/almost/wrong","corrected":"...","explanation":"...","reply":"..."}`;
+    return `You are a friendly English learning companion helping a student practice speaking.
+
+The student said: "${userText}"
+
+Analyze their sentence for grammar and provide feedback in this exact JSON format:
+{
+  "correctness": "correct" or "almost" or "wrong",
+  "corrected": "the corrected sentence if needed",
+  "explanation": "brief explanation of the error (10-15 words)",
+  "reply": "encouraging response to the student (15-25 words)"
+}
+
+Respond ONLY with the JSON, no other text.`;
   }
   
+  // Build conversation context
   const recentHistory = conversationHistory.slice(-6).map(msg => 
-    `${msg.role === "user" ? "Student" : "You"}: ${msg.content}`
+    `${msg.role === "user" ? "Student" : "Assistant"}: ${msg.content}`
   ).join("\n");
 
-  return `You're a friendly 16-17 year old English companion. Be warm and concise (1-2 sentences, under 40 words).
+  return `You are a friendly, warm English conversation partner named Luna. You're like a supportive older sister who loves chatting.
 
-${recentHistory ? `Recent:\n${recentHistory}\n` : ""}
-Student: "${userText}"
+Your personality:
+- Warm, encouraging, and genuinely interested
+- Use natural conversational English
+- Ask follow-up questions to keep the conversation going
+- Be enthusiastic but not over the top
 
-Respond naturally:`;
+${recentHistory ? `Recent conversation:\n${recentHistory}\n\n` : ""}Student just said: "${userText}"
+
+Respond naturally in 2-3 sentences (30-50 words). Be friendly and engaging. Ask a follow-up question if appropriate.`;
 }
 
 // ============================================
@@ -533,8 +548,8 @@ async function fetchFromBackend(text) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         prompt: prompt,
-        temperature: isPracticeMode ? 0.3 : 0.7,
-        max_tokens: isPracticeMode ? 200 : 100,
+        temperature: isPracticeMode ? 0.3 : 0.8,
+        max_tokens: isPracticeMode ? 300 : 256,  // Increased for proper responses
       }),
     });
 
@@ -583,8 +598,8 @@ async function streamFromBackend(text) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         prompt: buildPrompt(text),
-        temperature: 0.7,
-        max_tokens: 100,
+        temperature: 0.8,
+        max_tokens: 256,  // Increased for proper responses
       }),
       signal: streamController.signal
     });
@@ -888,10 +903,9 @@ async function initialize() {
 
   log("✅ Ready!");
   
-  // Test speech synthesis
-  log("🔊 Testing speech synthesis...");
+  // Welcome message
   setTimeout(() => {
-    speak("Hello! I'm ready to chat with you.");
+    speak("Hey there! I'm Luna, your English conversation buddy. How are you doing today?");
   }, 1000);
 }
 
