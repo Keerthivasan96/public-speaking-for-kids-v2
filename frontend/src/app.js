@@ -408,7 +408,7 @@ Safety:
 
 ${recentHistory ? `Recent conversation:\n${recentHistory}\n\n` : ""}User just said: "${userText}"
 
-Respond naturally in 4-6 sentences (40-80 words). Be warm, caring, and emotionally present. Give a meaningful response first, then optionally ask ONE friendly follow-up question.`;
+CRITICAL: You MUST respond with a complete 4-6 sentence reply (minimum 40 words). Give a warm, meaningful response FIRST, then optionally ask ONE follow-up question. Never give short 1-2 word replies.`;
 }
 
 // ============================================
@@ -593,7 +593,7 @@ async function fetchFromBackend(text) {
       body: JSON.stringify({
         prompt: prompt,
         temperature: isPracticeMode ? 0.3 : 0.8,
-        max_tokens: isPracticeMode ? 300 : 150,  // Reduced from 256 for faster responses
+        max_tokens: isPracticeMode ? 300 : 300,  // Increased for complete 4-6 sentence responses
       }),
     });
 
