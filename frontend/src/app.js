@@ -243,7 +243,7 @@ Respond in JSON format only:
 
 STYLE: Friendly, natural, like texting a close friend. Use contractions.
 
-RESPONSE LENGTH: 2-3 short sentences (25-45 words max). Be concise but warm.
+RESPONSE LENGTH: 3-5 short sentences (45 -50 words max). Be concise but warm.
 
 ${context ? `Recent chat:\n${context}\n` : ""}
 User: "${userText}"
