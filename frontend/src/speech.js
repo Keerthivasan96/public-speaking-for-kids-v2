@@ -82,42 +82,60 @@ export function startListening(onTextFinal, options = {}) {
   };
 
   recognition.onresult = (event) => {
-    clearTimeout(silenceTimer);
-
-    interimTranscript = "";
-    
-    for (let i = event.resultIndex; i < event.results.length; i++) {
-      const transcript = event.results[i][0].transcript;
-      
-      if (event.results[i].isFinal) {
-  finalTranscript += transcript + " ";
-  console.log("🎤 Final:", transcript);
-
-  // ⚡ IMMEDIATE FINALIZE (NO SILENCE WAIT)
   clearTimeout(silenceTimer);
-
-  const fullText = (finalTranscript + interimTranscript).trim();
-
-  if (fullText && typeof _onFinal === "function") {
-    console.log("⚡ Immediate Complete:", fullText);
-    try {
-      _onFinal(fullText, true);
-    } catch (e) {
-      console.error("Callback error:", e);
-    }
-  }
-
-  // Reset buffers
-  finalTranscript = "";
   interimTranscript = "";
 
-  // Stop recognition immediately (prevents lag)
-  stopListening();
-  return; // IMPORTANT: exit loop immediately
-} else {
-  interimTranscript = transcript;
-  console.log("🎤 Interim:", transcript);
-}
+  for (let i = event.resultIndex; i < event.results.length; i++) {
+    const transcript = event.results[i][0].transcript;
+
+    if (event.results[i].isFinal) {
+      finalTranscript += transcript + " ";
+      console.log("🎤 Final:", transcript);
+
+      // ⚡ IMMEDIATE FINALIZE
+      const fullText = (finalTranscript + interimTranscript).trim();
+
+      if (fullText && typeof _onFinal === "function") {
+        console.log("⚡ Immediate Complete:", fullText);
+        try {
+          _onFinal(fullText, true);
+        } catch (e) {
+          console.error("Callback error:", e);
+        }
+      }
+
+      // Reset buffers
+      finalTranscript = "";
+      interimTranscript = "";
+
+      stopListening();
+      return; // EXIT onresult
+    } else {
+      interimTranscript = transcript;
+      console.log("🎤 Interim:", transcript);
+    }
+  } // ✅ FOR LOOP CLOSED HERE
+
+  // ⏱️ FALLBACK SILENCE FINALIZE (only if no final result)
+  const timeout = isMobile ? 500 : SILENCE_TIMEOUT;
+
+  silenceTimer = setTimeout(() => {
+    const fullText = (finalTranscript + interimTranscript).trim();
+
+    if (fullText && typeof _onFinal === "function") {
+      console.log("✅ Complete (timeout):", fullText);
+      try {
+        _onFinal(fullText, true);
+      } catch (e) {
+        console.error("Callback error:", e);
+      }
+
+      finalTranscript = "";
+      interimTranscript = "";
+      stopListening();
+    }
+  }, timeout);
+};
 
 
     // MOBILE FIX: On mobile, finalize faster
