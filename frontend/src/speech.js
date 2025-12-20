@@ -18,7 +18,7 @@ const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
 const isAndroid = /Android/i.test(navigator.userAgent);
 
 // MOBILE FIX: Shorter timeout for mobile (they're more sensitive)
-const SILENCE_TIMEOUT = isMobile ? 1200 : 1800; // Mobile: 1.2s, Desktop: 1.8s
+const SILENCE_TIMEOUT = isMobile ? 600 : 801; // Mobile: 1.2s, Desktop: 1.8s
 
 console.log(`Device: ${isMobile ? 'Mobile' : 'Desktop'} (iOS: ${isIOS}, Android: ${isAndroid})`);
 
@@ -90,13 +90,35 @@ export function startListening(onTextFinal, options = {}) {
       const transcript = event.results[i][0].transcript;
       
       if (event.results[i].isFinal) {
-        finalTranscript += transcript + " ";
-        console.log("🎤 Final:", transcript);
-      } else {
-        interimTranscript += transcript;
-        console.log("🎤 Interim:", transcript);
-      }
+  finalTranscript += transcript + " ";
+  console.log("🎤 Final:", transcript);
+
+  // ⚡ IMMEDIATE FINALIZE (NO SILENCE WAIT)
+  clearTimeout(silenceTimer);
+
+  const fullText = (finalTranscript + interimTranscript).trim();
+
+  if (fullText && typeof _onFinal === "function") {
+    console.log("⚡ Immediate Complete:", fullText);
+    try {
+      _onFinal(fullText, true);
+    } catch (e) {
+      console.error("Callback error:", e);
     }
+  }
+
+  // Reset buffers
+  finalTranscript = "";
+  interimTranscript = "";
+
+  // Stop recognition immediately (prevents lag)
+  stopListening();
+  return; // IMPORTANT: exit loop immediately
+} else {
+  interimTranscript = transcript;
+  console.log("🎤 Interim:", transcript);
+}
+
 
     // MOBILE FIX: On mobile, finalize faster
     const timeout = isMobile ? 800 : SILENCE_TIMEOUT;
