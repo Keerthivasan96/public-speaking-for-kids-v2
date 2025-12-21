@@ -174,7 +174,7 @@ function calculateSmartTimeout(text) {
   
   // Normal sentences - base timeout
   return BASE_SILENCE_MS;
-
+}
 /**
  * Finalize and send text
  */
