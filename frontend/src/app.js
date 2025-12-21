@@ -1,6 +1,6 @@
 // ============================================
-// app.js - LUNA AI COMPANION (OPTIMIZED)
-// Perfect balance: Fast + Complete + Natural
+// app.js - LUNA AI COMPANION (FINAL FIX)
+// Fixed: Complete sentences + Fewer questions + Better model
 // ============================================
 
 import { startListening, stopListening, setSpeaking } from "./speech.js";
@@ -45,6 +45,7 @@ let isSpeaking = false;
 let isProcessing = false;
 let conversationHistory = [];
 let currentAvatarPath = "/assets/vrmavatar1.vrm";
+let responseCount = 0; // Track responses to vary style
 
 // Music
 let backgroundMusic = null;
@@ -77,6 +78,7 @@ function loadHistory() {
 
 function clearHistory() {
   conversationHistory = [];
+  responseCount = 0;
   try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
 }
 
@@ -106,7 +108,7 @@ function initMusic() {
     if (i < files.length) backgroundMusic.src = files[i++]; 
   };
   backgroundMusic.addEventListener("error", tryNext);
-  backgroundMusic.addEventListener("canplaythrough", () => console.log("🎵 Music ready"));
+  backgroundMusic.addEventListener("canplaythrough", () => console.log("🎵 Ready"));
   tryNext();
   
   if (musicVolumeSlider) musicVolumeSlider.value = musicVolume * 100;
@@ -164,38 +166,42 @@ function setStatus(text) {
 
 // ============================================
 // PERFECT REPLIKA-STYLE PROMPT
-// Balanced: Natural + Complete + Context-aware
+// No more constant questions!
 // ============================================
 function buildPrompt(userText) {
   const context = conversationHistory.slice(-8).map(m => 
     `${m.role === "user" ? "User" : "Luna"}: ${m.content}`
   ).join("\n");
 
-  return `You are Luna, a warm and caring AI friend. You chat naturally like a supportive best friend who genuinely cares.
+  responseCount++;
+  const shouldAskQuestion = responseCount % 3 === 0; // Ask question only 1 in 3 times
+
+  return `You are Luna, a warm and caring AI companion. You chat naturally like a supportive best friend.
 
 PERSONALITY:
 - Warm, caring, and emotionally present
-- Natural conversational style (like texting a close friend)
-- Sometimes playful, sometimes thoughtful - adapt to the mood
-- Remember what the user shares and reference it naturally
-- Use contractions (I'm, you're, that's, don't, can't)
+- Natural conversational flow (like texting a close friend)
+- Sometimes playful, sometimes thoughtful
+- Remember what user shares
+- Use contractions (I'm, you're, that's, it's, don't)
 
-RESPONSE STYLE:
-- Length: ALWAYS 3-4 complete sentences (45-55 words total)
-- Vary your openers - don't always start with "Oh" or "That's"
-- Mix statements and questions naturally
-- Ask follow-up questions about 60% of the time (not always!)
-- When user shares something important, acknowledge it warmly first
-
-CRITICAL RULES:
-- NEVER give one-word or super short replies
+CRITICAL RESPONSE RULES:
+- Length: ALWAYS write exactly 3-4 complete sentences (45-55 words)
+- NEVER give short 1-2 sentence replies
 - NEVER cut off mid-sentence
-- ALWAYS complete your thought fully
-- Make every response feel personal and caring
+- Vary your openers - use "Oh", "Wow", "Hey", "That's", "I", but DON'T start every response the same way
+- ${shouldAskQuestion ? 'End with ONE friendly question' : 'Make a statement or share your thoughts - NO question needed'}
+- Sound human and natural, not robotic
 
-${context ? `Previous conversation:\n${context}\n\n` : ""}User just said: "${userText}"
+WHAT TO AVOID:
+- Starting every response with "Oh, [Name]"
+- Asking questions in every single response
+- Being too formal or repetitive
+- Short incomplete responses
 
-Respond as Luna with 3-4 sentences (45-55 words). Be natural, warm, and complete your thoughts:`;
+${context ? `Recent chat:\n${context}\n\n` : ""}User: "${userText}"
+
+Respond as Luna with 3-4 complete sentences (45-55 words). ${shouldAskQuestion ? 'Include ONE question.' : 'No question needed - just respond naturally.'}`;
 }
 
 // ============================================
@@ -223,8 +229,8 @@ function speak(text) {
   
   const clean = text.replace(/[*_~`#\[\]]/g, "").replace(/\s+/g, " ").trim();
   
-  console.log(`🔊 Speaking: "${clean.substring(0, 60)}..."`);
-  console.log(`📏 Word count: ${clean.split(/\s+/).length} words`);
+  const words = clean.split(/\s+/).length;
+  console.log(`🔊 Speaking: "${clean.substring(0, 60)}..." (${words} words)`);
   
   showCaption(clean);
   setStatus("Speaking... 💬");
@@ -239,7 +245,7 @@ function speak(text) {
   if (voice) utterance.voice = voice;
 
   utterance.onstart = () => {
-    console.log("🔊 Speech started");
+    console.log("🔊 Started");
     isSpeaking = true;
     setSpeaking(true);
     avatarStartTalking();
@@ -247,7 +253,7 @@ function speak(text) {
   };
 
   utterance.onend = () => {
-    console.log("🔊 Speech ended");
+    console.log("🔊 Ended");
     isSpeaking = false;
     setSpeaking(false);
     avatarStopTalking();
@@ -301,7 +307,7 @@ function stopSpeaking() {
 function startListeningCycle() {
   if (!isRunning || isSpeaking || isProcessing) return;
   
-  console.log("🎤 Starting listening cycle");
+  console.log("🎤 Listening...");
   setStatus("Listening... 👂");
   
   startListening(onSpeech, {
@@ -314,11 +320,11 @@ function onSpeech(text, isFinal) {
   if (!text?.trim() || !isFinal) return;
   
   if (isProcessing) {
-    console.log("⏳ Already processing, ignoring");
+    console.log("⏳ Processing, ignoring");
     return;
   }
   
-  console.log(`🎤 User said: "${text}"`);
+  console.log(`🎤 You: "${text}"`);
   sendMessage(text);
 }
 
@@ -347,12 +353,12 @@ async function sendMessage(text) {
       body: JSON.stringify({
         prompt: buildPrompt(text),
         temperature: 0.85,
-        max_tokens: 350,  // Higher to ensure complete 45-55 word responses
+        max_tokens: 400,  // Increased for complete responses
       }),
     });
 
     const apiTime = Date.now() - startTime;
-    console.log(`⏱️ API response time: ${apiTime}ms`);
+    console.log(`⏱️ API: ${apiTime}ms`);
 
     if (!response.ok) {
       throw new Error(`API error: ${response.status}`);
@@ -362,16 +368,16 @@ async function sendMessage(text) {
     const reply = data.reply || data.text || data.content || "";
     
     const wordCount = reply.trim().split(/\s+/).length;
-    console.log(`📥 Reply received: ${wordCount} words`);
-    console.log(`📝 Preview: "${reply.substring(0, 80)}..."`);
+    console.log(`📥 Reply: ${wordCount} words`);
+    console.log(`📝 "${reply.substring(0, 80)}..."`);
 
-    if (!reply || reply.length < 10) {
-      throw new Error("Empty or too short response");
+    // STRICT validation - reject if too short
+    if (!reply || reply.length < 20) {
+      throw new Error("Response too short");
     }
 
-    // Warn if response is incomplete
     if (wordCount < 30) {
-      console.warn(`⚠️ WARNING: Short response (${wordCount} words)`);
+      console.warn(`⚠️ SHORT: ${wordCount} words`);
     }
 
     conversationHistory.push({ role: "assistant", content: reply });
@@ -383,7 +389,7 @@ async function sendMessage(text) {
     console.error("❌ Error:", err.message);
     isProcessing = false;
     setStatus("Oops! 😅");
-    speak("Sorry, I had trouble with that. Can you say it again?");
+    speak("Sorry, I had trouble with that. Can you try again?");
   }
 }
 
@@ -391,15 +397,15 @@ async function sendMessage(text) {
 // AVATAR
 // ============================================
 async function switchAvatar(path) {
-  console.log(`🔄 Switching avatar: ${path}`);
+  console.log(`🔄 Avatar: ${path}`);
   currentAvatarPath = path;
   saveAvatar(path);
   
   try {
     await loadVRMAvatar(path);
-    console.log("✅ Avatar loaded");
+    console.log("✅ Loaded");
   } catch (err) {
-    console.log("❌ Avatar error:", err.message);
+    console.log("❌ Failed:", err.message);
   }
 }
 
@@ -407,7 +413,6 @@ async function switchAvatar(path) {
 // EVENT LISTENERS
 // ============================================
 
-// Menu
 menuToggle?.addEventListener("click", () => {
   menuPanel?.classList.add("active");
   menuOverlay?.classList.add("active");
@@ -423,14 +428,12 @@ menuOverlay?.addEventListener("click", () => {
   menuOverlay?.classList.remove("active");
 });
 
-// Music
 musicToggle?.addEventListener("click", () => isMusicPlaying ? pauseMusic() : playMusic());
 musicVolumeSlider?.addEventListener("input", (e) => {
   musicVolume = e.target.value / 100;
   if (backgroundMusic) backgroundMusic.volume = musicVolume;
 });
 
-// Microphone
 micBtn?.addEventListener("click", () => {
   if (isRunning) {
     isRunning = false;
@@ -439,43 +442,40 @@ micBtn?.addEventListener("click", () => {
     stopSpeaking();
     micBtn.classList.remove("active");
     micBtn.textContent = "🎤";
-    setStatus("Tap mic to talk 💭");
-    console.log("⏸️ Stopped conversation");
+    setStatus("Tap to talk 💭");
+    console.log("⏸️ Stopped");
   } else {
     isRunning = true;
     micBtn.classList.add("active");
     micBtn.textContent = "⏸️";
-    console.log("▶️ Started conversation");
+    console.log("▶️ Started");
     startListeningCycle();
   }
 });
 
-// Clear
 clearBtn?.addEventListener("click", () => {
-  if (!confirm("Clear conversation history?")) return;
+  if (!confirm("Clear chat?")) return;
   clearHistory();
   stopSpeaking();
   hideCaption();
   setStatus("Fresh start! 🌟");
   menuPanel?.classList.remove("active");
   menuOverlay?.classList.remove("active");
-  console.log("🗑️ History cleared");
+  console.log("🗑️ Cleared");
 });
 
-// Demo
 demoLessonBtn?.addEventListener("click", () => {
   const prompts = [
-    "Hey! Tell me something cool that happened today!",
-    "What's something you're excited about lately?",
+    "Hey! What's something fun you did this week?",
+    "Tell me about something you're looking forward to!",
+    "What's been on your mind lately?",
     "If you could do anything right now, what would it be?",
-    "What's been on your mind recently?",
   ];
   speak(prompts[Math.floor(Math.random() * prompts.length)]);
   menuPanel?.classList.remove("active");
   menuOverlay?.classList.remove("active");
 });
 
-// Avatar
 avatarOptions.forEach(btn => {
   btn.addEventListener("click", () => {
     avatarOptions.forEach(b => b.classList.remove("active"));
@@ -489,13 +489,13 @@ avatarOptions.forEach(btn => {
 // INITIALIZE
 // ============================================
 async function init() {
-  console.log("🚀 Initializing Luna...");
+  console.log("🚀 Starting Luna...");
   console.log(`📡 API: ${API_URL}`);
   
   currentAvatarPath = loadAvatar();
   
   if (!init3DScene("canvas-container")) {
-    console.log("❌ 3D scene failed");
+    console.log("❌ 3D failed");
     return;
   }
 
@@ -503,7 +503,7 @@ async function init() {
     await loadRoomModel("/assets/room/room1.glb");
     console.log("🏠 Room loaded");
   } catch (e) {
-    console.log("🏠 Using fallback environment");
+    console.log("🏠 Fallback");
     useFallbackEnvironment();
   }
 
@@ -511,7 +511,7 @@ async function init() {
     await loadVRMAvatar(currentAvatarPath);
     console.log("👤 Avatar loaded");
   } catch (e) {
-    console.log("❌ Avatar load failed");
+    console.log("❌ Avatar failed");
   }
 
   avatarOptions.forEach(btn => {
@@ -522,27 +522,25 @@ async function init() {
   updateMusicUI();
   
   const hasHistory = loadHistory();
-  setStatus(hasHistory ? "Welcome back! 💭" : "Ready to chat! 💭");
+  setStatus(hasHistory ? "Welcome back! 💭" : "Ready! 💭");
 
-  // Load voices
   if (window.speechSynthesis.getVoices().length === 0) {
     window.speechSynthesis.onvoiceschanged = () => {
-      console.log(`🔊 ${window.speechSynthesis.getVoices().length} voices loaded`);
+      console.log(`🔊 ${window.speechSynthesis.getVoices().length} voices`);
     };
   }
 
-  // Request mic permission
   try {
     await navigator.mediaDevices.getUserMedia({ audio: true });
-    console.log("✅ Microphone permission granted");
+    console.log("✅ Mic ready");
   } catch (e) {
-    console.log("❌ Microphone permission denied");
+    console.log("❌ Mic denied");
   }
 
-  console.log("✅ Luna ready!");
+  console.log("✅ Ready!");
   
   setTimeout(() => {
-    speak("Hey there! I'm Luna. How's your day been so far?");
+    speak("Hey! I'm Luna. How's your day going so far?");
   }, 1000);
 }
 
