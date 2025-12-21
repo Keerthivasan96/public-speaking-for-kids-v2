@@ -21,13 +21,13 @@ const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/
 // BALANCED TIMING - Not too fast, not too slow
 // ============================================
 const CONFIG = {
-  baseSilence: isMobile ? 900 : 800,           // Normal sentences
-  shortPhraseSilence: 1200,                    // Wait longer for incomplete
-  completeSilence: 500,                        // Quick send for complete
+  baseSilence: isMobile ? 700 : 600,           // Normal sentences
+  shortPhraseSilence: 1000,                    // Wait longer for incomplete
+  completeSilence: 350,                        // Quick send for complete
   
-  minSendGap: 2000,
-  restartDelay: isMobile ? 300 : 250,
-  minWordsForNormal: 5,                        // Need 5+ words for normal timing
+  minSendGap: 1500,
+  restartDelay: isMobile ? 200 : 150,
+  minWordsForNormal: 4,                        // Need 4+ words for normal timing
 };
 
 console.log(`🎤 Speech: ${isMobile ? 'Mobile' : 'Desktop'} mode`);
