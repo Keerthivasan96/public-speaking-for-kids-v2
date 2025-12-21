@@ -1,6 +1,6 @@
 // ============================================
-// speech.js - CLEAN SPEECH RECOGNITION
-// Prevents double-sends, smooth timing
+// speech.js - SMART SPEECH RECOGNITION
+// Waits for complete thoughts, quick response
 // ============================================
 
 let recognition = null;
@@ -18,16 +18,55 @@ let lastSendTime = 0;
 const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
 // ============================================
-// TIMING CONFIG - Replika-style (wait for complete thoughts)
+// TIMING CONFIG
 // ============================================
-const BASE_SILENCE_MS = isMobile ? 1200 : 1000;  // Base wait time
-const SHORT_PHRASE_SILENCE = 1500;                // Extra time for short phrases (1-3 words)
-const SENTENCE_END_SILENCE = 600;                 // Faster if sentence seems complete
-const MIN_SEND_GAP = 2500;                        // Minimum 2.5s between sends
-const RESTART_DELAY = isMobile ? 400 : 300;
-const MIN_WORDS_QUICK = 4;                        // Need 4+ words for normal timing
+const CONFIG = {
+  baseSilence: isMobile ? 1100 : 900,      // Normal sentences
+  shortPhraseSilence: 1400,                 // Short incomplete phrases (wait longer)
+  completeSilence: 500,                     // Clearly complete phrases (send fast)
+  minSendGap: 2500,                         // Prevent double-sends
+  restartDelay: isMobile ? 350 : 250,       // Quick restart
+  minWordsForQuick: 4,                      // Need 4+ words for normal timing
+};
 
-console.log(`🎤 Speech: ${isMobile ? 'Mobile' : 'Desktop'} | Silence: ${SILENCE_MS}ms`);
+console.log(`🎤 Speech: ${isMobile ? 'Mobile' : 'Desktop'}`);
+
+/**
+ * Calculate smart timeout
+ */
+function getTimeout(text) {
+  const words = text.trim().split(/\s+/).filter(w => w);
+  const wordCount = words.length;
+  const lastChar = text.trim().slice(-1);
+  const lower = text.toLowerCase().trim();
+  
+  // Sentence ends with punctuation - complete
+  if (['.', '!', '?'].includes(lastChar)) {
+    return CONFIG.completeSilence;
+  }
+  
+  // Common complete short phrases
+  const completePatterns = [
+    /^(yes|no|yeah|yep|nope|okay|ok|sure|thanks|thank you|hi|hello|hey|bye)$/i,
+    /^i'?m (good|fine|great|okay|ok|doing good|doing great|doing fine)$/i,
+    /^that'?s (good|great|cool|nice|fine|awesome|interesting)$/i,
+    /^(good morning|good night|good evening|good afternoon)$/i,
+    /^(not really|of course|i think so|i guess|maybe|probably)$/i,
+  ];
+  
+  if (completePatterns.some(p => p.test(lower))) {
+    return CONFIG.completeSilence;
+  }
+  
+  // Short phrases that seem INCOMPLETE - wait longer
+  // Examples: "my name is", "I want to", "can you"
+  if (wordCount < CONFIG.minWordsForQuick) {
+    return CONFIG.shortPhraseSilence;
+  }
+  
+  // Normal sentence
+  return CONFIG.baseSilence;
+}
 
 /**
  * Start listening
@@ -40,7 +79,6 @@ export function startListening(onFinal, options = {}) {
     return;
   }
 
-  // Don't start if speaking
   if (isSpeaking) {
     callback = onFinal;
     continuous = !!options.continuous;
@@ -50,14 +88,11 @@ export function startListening(onFinal, options = {}) {
   callback = onFinal;
   continuous = !!options.continuous;
 
-  // Already listening
   if (recognition && isListening) return;
 
-  // Clean up
   cleanup();
   pendingText = "";
 
-  // Create recognition
   recognition = new SpeechRecognition();
   recognition.continuous = !isMobile;
   recognition.interimResults = true;
@@ -84,30 +119,21 @@ export function startListening(onFinal, options = {}) {
       }
     }
     
-    // Build full pending text
-    if (final) {
-      pendingText += final;
-    }
+    if (final) pendingText += final;
     
     const fullText = (pendingText + interim).trim();
     
-    if (interim) {
-      console.log("🎤 ...", interim);
-    }
+    if (interim) console.log("🎤 ...", interim);
     
-    // SMART TIMEOUT CALCULATION
     if (fullText) {
-      const timeout = calculateSmartTimeout(fullText);
-      silenceTimer = setTimeout(() => {
-        finalize(fullText);
-      }, timeout);
+      const timeout = getTimeout(fullText);
+      silenceTimer = setTimeout(() => finalize(fullText), timeout);
     }
   };
 
   recognition.onerror = (e) => {
     console.log("🎤 Error:", e.error);
     clearTimeout(silenceTimer);
-    
     if (e.error === 'not-allowed') {
       alert("Please allow microphone access.");
     }
@@ -117,7 +143,6 @@ export function startListening(onFinal, options = {}) {
     console.log("🎤 Ended");
     isListening = false;
     
-    // Finalize any pending text
     const text = pendingText.trim();
     if (text) {
       clearTimeout(silenceTimer);
@@ -125,13 +150,11 @@ export function startListening(onFinal, options = {}) {
       return;
     }
     
-    // Auto-restart if continuous
     if (continuous && !isSpeaking) {
       scheduleRestart();
     }
   };
 
-  // Start
   try {
     recognition.start();
   } catch (e) {
@@ -140,64 +163,25 @@ export function startListening(onFinal, options = {}) {
 }
 
 /**
- * Calculate smart timeout based on what user said
- */
-function calculateSmartTimeout(text) {
-  const words = text.trim().split(/\s+/).filter(w => w.length > 0);
-  const wordCount = words.length;
-  const lastChar = text.trim().slice(-1);
-  
-  // Check if sentence seems complete (ends with punctuation)
-  const seemsComplete = ['.', '!', '?'].includes(lastChar);
-  
-  // Check for common complete phrases
-  const lowerText = text.toLowerCase().trim();
-  const completePatterns = [
-    /^(yes|no|yeah|yep|nope|okay|ok|sure|thanks|thank you|hello|hi|hey|bye|goodbye)$/,
-    /^i'?m\s+(good|fine|great|okay|ok)$/,
-    /^that'?s\s+(good|great|fine|cool|nice|interesting)$/,
-  ];
-  const isCompletePhrase = completePatterns.some(p => p.test(lowerText));
-  
-  // If clearly complete, send faster
-  if (seemsComplete || isCompletePhrase) {
-    console.log("🎤 [Seems complete, using short timeout]");
-    return SENTENCE_END_SILENCE;
-  }
-  
-  // Short phrases (1-3 words) that DON'T seem complete - wait longer
-  // This prevents "my name is" from sending before "my name is Keerthi"
-  if (wordCount < MIN_WORDS_QUICK) {
-    console.log(`🎤 [Short phrase: ${wordCount} words, waiting longer]`);
-    return SHORT_PHRASE_SILENCE;
-  }
-  
-  // Normal sentences - base timeout
-  return BASE_SILENCE_MS;
-}
-/**
- * Finalize and send text
+ * Finalize and send
  */
 function finalize(text) {
   if (!text) return;
   
-  // PREVENT DOUBLE SENDS
   const now = Date.now();
-  if (now - lastSendTime < MIN_SEND_GAP) {
-    console.log("⏳ Too soon, skipping duplicate");
+  if (now - lastSendTime < CONFIG.minSendGap) {
+    console.log("⏳ Too soon, skip");
     pendingText = "";
     scheduleRestart();
     return;
   }
   
-  console.log("✅ Sending:", text);
+  console.log("✅ Send:", text);
   lastSendTime = now;
   pendingText = "";
   
-  // Stop recognition
   stopRecognition();
   
-  // Call callback
   if (typeof callback === "function") {
     try {
       callback(text, true);
@@ -207,37 +191,28 @@ function finalize(text) {
   }
 }
 
-/**
- * Schedule restart
- */
 function scheduleRestart() {
   clearTimeout(restartTimer);
   restartTimer = setTimeout(() => {
     if (continuous && !isSpeaking && !isListening) {
       startListening(callback, { continuous: true });
     }
-  }, RESTART_DELAY);
+  }, CONFIG.restartDelay);
 }
 
-/**
- * Stop recognition only
- */
 function stopRecognition() {
   clearTimeout(silenceTimer);
   if (recognition) {
     try {
       recognition.onend = null;
       recognition.stop();
-    } catch(e) {}
+    } catch (e) {}
   }
   isListening = false;
 }
 
-/**
- * Stop listening completely
- */
 export function stopListening() {
-  console.log("🛑 Stopping...");
+  console.log("🛑 Stop");
   continuous = false;
   callback = null;
   isListening = false;
@@ -245,37 +220,27 @@ export function stopListening() {
   cleanup();
 }
 
-/**
- * Cleanup
- */
 function cleanup() {
   clearTimeout(silenceTimer);
   clearTimeout(restartTimer);
   if (recognition) {
-    try { recognition.onend = null; } catch(_) {}
-    try { recognition.stop(); } catch(_) {}
+    try { recognition.onend = null; } catch (e) {}
+    try { recognition.stop(); } catch (e) {}
     recognition = null;
   }
 }
 
-/**
- * Mark speaking state (called from app.js)
- */
 export function setSpeaking(speaking) {
   isSpeaking = speaking;
 }
 
-/**
- * Stop speaking
- */
 export function stopSpeaking() {
   if (window.speechSynthesis) {
-    try { window.speechSynthesis.cancel(); } catch(_) {}
+    try { window.speechSynthesis.cancel(); } catch (e) {}
   }
   isSpeaking = false;
 }
 
-// Global access
 if (typeof window !== "undefined") {
   window.startListening = startListening;
   window.stopListening = stopListening;

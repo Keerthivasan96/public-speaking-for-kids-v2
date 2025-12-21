@@ -1,6 +1,6 @@
 // ============================================
 // app.js - LUNA AI COMPANION
-// Clean Replika-style chat experience
+// Clean Replika-style chat
 // ============================================
 
 import { startListening, stopListening, setSpeaking } from "./speech.js";
@@ -17,7 +17,6 @@ import {
 // CONFIG
 // ============================================
 const API_URL = "https://public-speaking-for-kids-backend-v2.vercel.app/api/generate";
-
 const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
 // ============================================
@@ -41,7 +40,7 @@ const avatarOptions = document.querySelectorAll(".avatar-option");
 // ============================================
 let isRunning = false;
 let isSpeaking = false;
-let isProcessing = false;  // Prevents double-sends
+let isProcessing = false;
 let conversationHistory = [];
 let currentAvatarPath = "/assets/vrmavatar1.vrm";
 
@@ -57,7 +56,9 @@ const STORAGE_KEY = "luna_chat";
 const AVATAR_KEY = "luna_avatar";
 
 function saveHistory() {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(conversationHistory.slice(-30))); } catch(e) {}
+  try { 
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(conversationHistory.slice(-30))); 
+  } catch (e) {}
 }
 
 function loadHistory() {
@@ -65,25 +66,28 @@ function loadHistory() {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       conversationHistory = JSON.parse(saved);
-      console.log(`📂 Loaded ${conversationHistory.length} messages`);
+      console.log("📂 Loaded", conversationHistory.length, "messages");
       return true;
     }
-  } catch(e) {}
+  } catch (e) {}
   return false;
 }
 
 function clearHistory() {
   conversationHistory = [];
-  try { localStorage.removeItem(STORAGE_KEY); } catch(e) {}
+  try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
 }
 
 function saveAvatar(path) {
-  try { localStorage.setItem(AVATAR_KEY, path); } catch(e) {}
+  try { localStorage.setItem(AVATAR_KEY, path); } catch (e) {}
 }
 
 function loadAvatar() {
-  try { return localStorage.getItem(AVATAR_KEY) || "/assets/vrmavatar1.vrm"; }
-  catch(e) { return "/assets/vrmavatar1.vrm"; }
+  try { 
+    return localStorage.getItem(AVATAR_KEY) || "/assets/vrmavatar1.vrm"; 
+  } catch (e) { 
+    return "/assets/vrmavatar1.vrm"; 
+  }
 }
 
 // ============================================
@@ -96,7 +100,9 @@ function initMusic() {
   
   const files = ["/assets/music/ambient.mp3", "/assets/music/ambient1.mp3"];
   let i = 0;
-  const tryNext = () => { if (i < files.length) backgroundMusic.src = files[i++]; };
+  const tryNext = () => { 
+    if (i < files.length) backgroundMusic.src = files[i++]; 
+  };
   backgroundMusic.addEventListener("error", tryNext);
   backgroundMusic.addEventListener("canplaythrough", () => console.log("🎵 Music ready"));
   tryNext();
@@ -105,7 +111,10 @@ function initMusic() {
 }
 
 function playMusic() {
-  backgroundMusic?.play().then(() => { isMusicPlaying = true; updateMusicUI(); }).catch(() => {});
+  backgroundMusic?.play().then(() => { 
+    isMusicPlaying = true; 
+    updateMusicUI(); 
+  }).catch(() => {});
 }
 
 function pauseMusic() {
@@ -131,7 +140,7 @@ function restoreMusic() {
 }
 
 // ============================================
-// CAPTION - Fixed for smooth display
+// CAPTION
 // ============================================
 function showCaption(text) {
   if (!chatCaption) return;
@@ -152,10 +161,9 @@ function setStatus(text) {
 }
 
 // ============================================
-// PROMPT - Replika Style (Natural & Warm)
+// PROMPT - Replika Style
 // ============================================
 function buildPrompt(userText) {
-  // Last 3 exchanges for context
   const context = conversationHistory.slice(-6).map(m => 
     `${m.role === "user" ? "User" : "Luna"}: ${m.content}`
   ).join("\n");
@@ -164,12 +172,10 @@ function buildPrompt(userText) {
 
 Be natural and conversational - like texting a close friend.
 Keep responses 2-3 sentences (40-55 words).
-Vary your sentence starters - avoid always starting with "Oh" or "That's".
+Vary your sentence starters - don't always start with "Oh" or "That's".
 Ask a follow-up question sometimes, but not every time.
 
 ${context ? `Recent:\n${context}\n\n` : ""}User: "${userText}"
-
-Luna:`;
 
 Luna:`;
 }
@@ -190,19 +196,17 @@ function getBestVoice() {
 }
 
 // ============================================
-// SPEAK - Clean implementation
+// SPEAK
 // ============================================
 function speak(text) {
   if (!text?.trim()) return;
 
-  // Cancel any existing speech
   window.speechSynthesis.cancel();
   
   const clean = text.replace(/[*_~`#\[\]]/g, "").replace(/\s+/g, " ").trim();
   
-  console.log(`🔊 Speaking: "${clean.substring(0, 50)}..."`);
+  console.log("🔊 Speaking:", clean.substring(0, 50) + "...");
   
-  // Show caption FIRST
   showCaption(clean);
   setStatus("Speaking... 💬");
   
@@ -229,7 +233,7 @@ function speak(text) {
     avatarStopTalking();
     hideCaption();
     restoreMusic();
-    isProcessing = false;  // Allow new messages
+    isProcessing = false;
     
     if (isRunning) {
       setStatus("Listening... 👂");
@@ -237,7 +241,7 @@ function speak(text) {
         if (isRunning && !isSpeaking) {
           startListeningCycle();
         }
-      }, isMobile ? 500 : 300);
+      }, isMobile ? 400 : 250);
     } else {
       setStatus("Tap mic to talk 💭");
     }
@@ -253,11 +257,10 @@ function speak(text) {
     isProcessing = false;
     
     if (isRunning) {
-      setTimeout(startListeningCycle, 500);
+      setTimeout(startListeningCycle, 400);
     }
   };
 
-  // Small delay for smooth transition
   setTimeout(() => {
     window.speechSynthesis.speak(utterance);
   }, 50);
@@ -288,14 +291,12 @@ function startListeningCycle() {
 
 function onSpeech(text, isFinal) {
   if (!text?.trim() || !isFinal) return;
-  
-  // Prevent double processing
   if (isProcessing) {
-    console.log("⏳ Already processing, skip");
+    console.log("⏳ Already processing");
     return;
   }
   
-  console.log(`🎤 You: "${text}"`);
+  console.log("🎤 You:", text);
   sendMessage(text);
 }
 
@@ -303,19 +304,17 @@ function onSpeech(text, isFinal) {
 // SEND MESSAGE
 // ============================================
 async function sendMessage(text) {
-  if (!text?.trim()) return;
-  if (isProcessing) return;  // Guard against double-send
+  if (!text?.trim() || isProcessing) return;
   
   isProcessing = true;
   stopSpeaking();
   stopListening();
   
-  // Add to history
   conversationHistory.push({ role: "user", content: text });
   saveHistory();
   
   setStatus("Thinking... 💭");
-  console.log(`📤 Sending: "${text}"`);
+  console.log("📤 Sending:", text);
 
   try {
     const response = await fetch(API_URL, {
@@ -328,29 +327,27 @@ async function sendMessage(text) {
       }),
     });
 
-    if (!response.ok) throw new Error(`API error: ${response.status}`);
+    if (!response.ok) throw new Error("API error: " + response.status);
 
     const data = await response.json();
     const reply = data.reply || data.text || "";
     
-    console.log(`📥 Reply: "${reply.substring(0, 60)}..."`);
+    console.log("📥 Reply:", reply.substring(0, 60) + "...");
 
     if (!reply || reply.length < 5) {
       throw new Error("Empty response");
     }
 
-    // Add to history
     conversationHistory.push({ role: "assistant", content: reply });
     saveHistory();
     
-    // Speak reply
     speak(reply);
 
   } catch (err) {
     console.error("❌ Error:", err.message);
     isProcessing = false;
     setStatus("Oops! 😅");
-    speak("Sorry, I had a little trouble there. Can you say that again?");
+    speak("Sorry, I had trouble there. Can you say that again?");
   }
 }
 
@@ -358,7 +355,7 @@ async function sendMessage(text) {
 // AVATAR
 // ============================================
 async function switchAvatar(path) {
-  console.log(`🔄 Loading: ${path}`);
+  console.log("🔄 Loading:", path);
   currentAvatarPath = path;
   saveAvatar(path);
   
@@ -366,7 +363,7 @@ async function switchAvatar(path) {
     await loadVRMAvatar(path);
     console.log("✅ Avatar loaded");
   } catch (err) {
-    console.log(`❌ Avatar error: ${err.message}`);
+    console.log("❌ Avatar error:", err.message);
   }
 }
 
@@ -397,10 +394,9 @@ musicVolumeSlider?.addEventListener("input", (e) => {
   if (backgroundMusic) backgroundMusic.volume = musicVolume;
 });
 
-// Microphone - Main toggle
+// Microphone
 micBtn?.addEventListener("click", () => {
   if (isRunning) {
-    // STOP
     isRunning = false;
     isProcessing = false;
     stopListening();
@@ -410,7 +406,6 @@ micBtn?.addEventListener("click", () => {
     setStatus("Tap mic to talk 💭");
     console.log("⏸️ Stopped");
   } else {
-    // START
     isRunning = true;
     micBtn.classList.add("active");
     micBtn.textContent = "⏸️";
@@ -419,7 +414,7 @@ micBtn?.addEventListener("click", () => {
   }
 });
 
-// Clear history
+// Clear
 clearBtn?.addEventListener("click", () => {
   if (!confirm("Start fresh?")) return;
   clearHistory();
@@ -430,7 +425,7 @@ clearBtn?.addEventListener("click", () => {
   menuOverlay?.classList.remove("active");
 });
 
-// Demo prompts
+// Demo
 demoLessonBtn?.addEventListener("click", () => {
   const prompts = [
     "Tell me something interesting about yourself!",
@@ -443,7 +438,7 @@ demoLessonBtn?.addEventListener("click", () => {
   menuOverlay?.classList.remove("active");
 });
 
-// Avatar selection
+// Avatar
 avatarOptions.forEach(btn => {
   btn.addEventListener("click", () => {
     avatarOptions.forEach(b => b.classList.remove("active"));
@@ -461,13 +456,11 @@ async function init() {
   
   currentAvatarPath = loadAvatar();
   
-  // Init 3D
   if (!init3DScene("canvas-container")) {
     console.log("❌ 3D failed");
     return;
   }
 
-  // Load room
   try {
     await loadRoomModel("/assets/room/room1.glb");
     console.log("🏠 Room loaded");
@@ -475,7 +468,6 @@ async function init() {
     useFallbackEnvironment();
   }
 
-  // Load avatar
   try {
     await loadVRMAvatar(currentAvatarPath);
     console.log("👤 Avatar loaded");
@@ -483,27 +475,21 @@ async function init() {
     console.log("❌ Avatar error");
   }
 
-  // Mark active avatar
   avatarOptions.forEach(btn => {
     btn.classList.toggle("active", btn.dataset.avatar === currentAvatarPath);
   });
 
-  // Init music
   initMusic();
   updateMusicUI();
-
-  // Load history
   loadHistory();
   setStatus("Ready to chat! 💭");
 
-  // Load voices
   if (window.speechSynthesis.getVoices().length === 0) {
     window.speechSynthesis.onvoiceschanged = () => {
-      console.log(`🔊 ${window.speechSynthesis.getVoices().length} voices`);
+      console.log("🔊", window.speechSynthesis.getVoices().length, "voices");
     };
   }
 
-  // Mic permission
   try {
     await navigator.mediaDevices.getUserMedia({ audio: true });
     console.log("✅ Mic ready");
@@ -513,20 +499,17 @@ async function init() {
 
   console.log("✅ Ready!");
   
-  // Welcome message
   setTimeout(() => {
     speak("Hey! I'm Luna. How's your day going?");
   }, 1000);
 }
 
-// Start
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", init);
 } else {
   init();
 }
 
-// Cleanup
 window.addEventListener("beforeunload", () => {
   stopSpeaking();
   stopListening();
