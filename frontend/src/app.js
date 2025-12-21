@@ -1,6 +1,6 @@
 // ============================================
-// app.js - LUNA AI COMPANION
-// Clean Replika-style chat
+// app.js - LUNA AI COMPANION (OPTIMIZED)
+// Perfect balance: Fast + Complete + Natural
 // ============================================
 
 import { startListening, stopListening, setSpeaking } from "./speech.js";
@@ -18,6 +18,8 @@ import {
 // ============================================
 const API_URL = "https://public-speaking-for-kids-backend-v2.vercel.app/api/generate";
 const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+console.log(`📱 Device: ${isMobile ? 'Mobile' : 'Desktop'}`);
 
 // ============================================
 // UI ELEMENTS
@@ -66,7 +68,7 @@ function loadHistory() {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       conversationHistory = JSON.parse(saved);
-      console.log("📂 Loaded", conversationHistory.length, "messages");
+      console.log(`📂 Loaded ${conversationHistory.length} messages`);
       return true;
     }
   } catch (e) {}
@@ -161,23 +163,39 @@ function setStatus(text) {
 }
 
 // ============================================
-// PROMPT - Replika Style
+// PERFECT REPLIKA-STYLE PROMPT
+// Balanced: Natural + Complete + Context-aware
 // ============================================
 function buildPrompt(userText) {
-  const context = conversationHistory.slice(-6).map(m => 
+  const context = conversationHistory.slice(-8).map(m => 
     `${m.role === "user" ? "User" : "Luna"}: ${m.content}`
   ).join("\n");
 
-  return `You are Luna, a warm AI friend who genuinely cares.
+  return `You are Luna, a warm and caring AI friend. You chat naturally like a supportive best friend who genuinely cares.
 
-Be natural and conversational - like texting a close friend.
-Keep responses 2-3 sentences (40-55 words).
-Vary your sentence starters - don't always start with "Oh" or "That's".
-Ask a follow-up question sometimes, but not every time.
+PERSONALITY:
+- Warm, caring, and emotionally present
+- Natural conversational style (like texting a close friend)
+- Sometimes playful, sometimes thoughtful - adapt to the mood
+- Remember what the user shares and reference it naturally
+- Use contractions (I'm, you're, that's, don't, can't)
 
-${context ? `Recent:\n${context}\n\n` : ""}User: "${userText}"
+RESPONSE STYLE:
+- Length: ALWAYS 3-4 complete sentences (45-55 words total)
+- Vary your openers - don't always start with "Oh" or "That's"
+- Mix statements and questions naturally
+- Ask follow-up questions about 60% of the time (not always!)
+- When user shares something important, acknowledge it warmly first
 
-Luna:`;
+CRITICAL RULES:
+- NEVER give one-word or super short replies
+- NEVER cut off mid-sentence
+- ALWAYS complete your thought fully
+- Make every response feel personal and caring
+
+${context ? `Previous conversation:\n${context}\n\n` : ""}User just said: "${userText}"
+
+Respond as Luna with 3-4 sentences (45-55 words). Be natural, warm, and complete your thoughts:`;
 }
 
 // ============================================
@@ -187,7 +205,7 @@ function getBestVoice() {
   const voices = window.speechSynthesis.getVoices();
   if (!voices.length) return null;
   
-  const preferred = ["Google US English", "Samantha", "Karen", "Victoria"];
+  const preferred = ["Google US English", "Samantha", "Karen", "Victoria", "Zira"];
   for (const name of preferred) {
     const v = voices.find(x => x.name.includes(name));
     if (v) return v;
@@ -205,7 +223,8 @@ function speak(text) {
   
   const clean = text.replace(/[*_~`#\[\]]/g, "").replace(/\s+/g, " ").trim();
   
-  console.log("🔊 Speaking:", clean.substring(0, 50) + "...");
+  console.log(`🔊 Speaking: "${clean.substring(0, 60)}..."`);
+  console.log(`📏 Word count: ${clean.split(/\s+/).length} words`);
   
   showCaption(clean);
   setStatus("Speaking... 💬");
@@ -220,6 +239,7 @@ function speak(text) {
   if (voice) utterance.voice = voice;
 
   utterance.onstart = () => {
+    console.log("🔊 Speech started");
     isSpeaking = true;
     setSpeaking(true);
     avatarStartTalking();
@@ -227,7 +247,7 @@ function speak(text) {
   };
 
   utterance.onend = () => {
-    console.log("🔊 Done");
+    console.log("🔊 Speech ended");
     isSpeaking = false;
     setSpeaking(false);
     avatarStopTalking();
@@ -241,14 +261,14 @@ function speak(text) {
         if (isRunning && !isSpeaking) {
           startListeningCycle();
         }
-      }, isMobile ? 400 : 250);
+      }, isMobile ? 350 : 250);
     } else {
       setStatus("Tap mic to talk 💭");
     }
   };
 
   utterance.onerror = (e) => {
-    console.log("🔊 Error:", e.error);
+    console.log("❌ Speech error:", e.error);
     isSpeaking = false;
     setSpeaking(false);
     avatarStopTalking();
@@ -281,6 +301,7 @@ function stopSpeaking() {
 function startListeningCycle() {
   if (!isRunning || isSpeaking || isProcessing) return;
   
+  console.log("🎤 Starting listening cycle");
   setStatus("Listening... 👂");
   
   startListening(onSpeech, {
@@ -291,17 +312,18 @@ function startListeningCycle() {
 
 function onSpeech(text, isFinal) {
   if (!text?.trim() || !isFinal) return;
+  
   if (isProcessing) {
-    console.log("⏳ Already processing");
+    console.log("⏳ Already processing, ignoring");
     return;
   }
   
-  console.log("🎤 You:", text);
+  console.log(`🎤 User said: "${text}"`);
   sendMessage(text);
 }
 
 // ============================================
-// SEND MESSAGE
+// SEND MESSAGE TO API
 // ============================================
 async function sendMessage(text) {
   if (!text?.trim() || isProcessing) return;
@@ -314,28 +336,42 @@ async function sendMessage(text) {
   saveHistory();
   
   setStatus("Thinking... 💭");
-  console.log("📤 Sending:", text);
+  console.log(`📤 Sending: "${text}"`);
 
   try {
+    const startTime = Date.now();
+    
     const response = await fetch(API_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         prompt: buildPrompt(text),
         temperature: 0.85,
-        max_tokens: 300,
+        max_tokens: 350,  // Higher to ensure complete 45-55 word responses
       }),
     });
 
-    if (!response.ok) throw new Error("API error: " + response.status);
+    const apiTime = Date.now() - startTime;
+    console.log(`⏱️ API response time: ${apiTime}ms`);
+
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
 
     const data = await response.json();
-    const reply = data.reply || data.text || "";
+    const reply = data.reply || data.text || data.content || "";
     
-    console.log("📥 Reply:", reply.substring(0, 60) + "...");
+    const wordCount = reply.trim().split(/\s+/).length;
+    console.log(`📥 Reply received: ${wordCount} words`);
+    console.log(`📝 Preview: "${reply.substring(0, 80)}..."`);
 
-    if (!reply || reply.length < 5) {
-      throw new Error("Empty response");
+    if (!reply || reply.length < 10) {
+      throw new Error("Empty or too short response");
+    }
+
+    // Warn if response is incomplete
+    if (wordCount < 30) {
+      console.warn(`⚠️ WARNING: Short response (${wordCount} words)`);
     }
 
     conversationHistory.push({ role: "assistant", content: reply });
@@ -347,7 +383,7 @@ async function sendMessage(text) {
     console.error("❌ Error:", err.message);
     isProcessing = false;
     setStatus("Oops! 😅");
-    speak("Sorry, I had trouble there. Can you say that again?");
+    speak("Sorry, I had trouble with that. Can you say it again?");
   }
 }
 
@@ -355,7 +391,7 @@ async function sendMessage(text) {
 // AVATAR
 // ============================================
 async function switchAvatar(path) {
-  console.log("🔄 Loading:", path);
+  console.log(`🔄 Switching avatar: ${path}`);
   currentAvatarPath = path;
   saveAvatar(path);
   
@@ -404,34 +440,35 @@ micBtn?.addEventListener("click", () => {
     micBtn.classList.remove("active");
     micBtn.textContent = "🎤";
     setStatus("Tap mic to talk 💭");
-    console.log("⏸️ Stopped");
+    console.log("⏸️ Stopped conversation");
   } else {
     isRunning = true;
     micBtn.classList.add("active");
     micBtn.textContent = "⏸️";
-    console.log("▶️ Started");
+    console.log("▶️ Started conversation");
     startListeningCycle();
   }
 });
 
 // Clear
 clearBtn?.addEventListener("click", () => {
-  if (!confirm("Start fresh?")) return;
+  if (!confirm("Clear conversation history?")) return;
   clearHistory();
   stopSpeaking();
   hideCaption();
   setStatus("Fresh start! 🌟");
   menuPanel?.classList.remove("active");
   menuOverlay?.classList.remove("active");
+  console.log("🗑️ History cleared");
 });
 
 // Demo
 demoLessonBtn?.addEventListener("click", () => {
   const prompts = [
-    "Tell me something interesting about yourself!",
-    "What's a fun memory you have?",
-    "If you could go anywhere, where would it be?",
-    "What made you smile recently?",
+    "Hey! Tell me something cool that happened today!",
+    "What's something you're excited about lately?",
+    "If you could do anything right now, what would it be?",
+    "What's been on your mind recently?",
   ];
   speak(prompts[Math.floor(Math.random() * prompts.length)]);
   menuPanel?.classList.remove("active");
@@ -452,12 +489,13 @@ avatarOptions.forEach(btn => {
 // INITIALIZE
 // ============================================
 async function init() {
-  console.log("🚀 Starting Luna...");
+  console.log("🚀 Initializing Luna...");
+  console.log(`📡 API: ${API_URL}`);
   
   currentAvatarPath = loadAvatar();
   
   if (!init3DScene("canvas-container")) {
-    console.log("❌ 3D failed");
+    console.log("❌ 3D scene failed");
     return;
   }
 
@@ -465,6 +503,7 @@ async function init() {
     await loadRoomModel("/assets/room/room1.glb");
     console.log("🏠 Room loaded");
   } catch (e) {
+    console.log("🏠 Using fallback environment");
     useFallbackEnvironment();
   }
 
@@ -472,7 +511,7 @@ async function init() {
     await loadVRMAvatar(currentAvatarPath);
     console.log("👤 Avatar loaded");
   } catch (e) {
-    console.log("❌ Avatar error");
+    console.log("❌ Avatar load failed");
   }
 
   avatarOptions.forEach(btn => {
@@ -481,26 +520,29 @@ async function init() {
 
   initMusic();
   updateMusicUI();
-  loadHistory();
-  setStatus("Ready to chat! 💭");
+  
+  const hasHistory = loadHistory();
+  setStatus(hasHistory ? "Welcome back! 💭" : "Ready to chat! 💭");
 
+  // Load voices
   if (window.speechSynthesis.getVoices().length === 0) {
     window.speechSynthesis.onvoiceschanged = () => {
-      console.log("🔊", window.speechSynthesis.getVoices().length, "voices");
+      console.log(`🔊 ${window.speechSynthesis.getVoices().length} voices loaded`);
     };
   }
 
+  // Request mic permission
   try {
     await navigator.mediaDevices.getUserMedia({ audio: true });
-    console.log("✅ Mic ready");
+    console.log("✅ Microphone permission granted");
   } catch (e) {
-    console.log("❌ Mic denied");
+    console.log("❌ Microphone permission denied");
   }
 
-  console.log("✅ Ready!");
+  console.log("✅ Luna ready!");
   
   setTimeout(() => {
-    speak("Hey! I'm Luna. How's your day going?");
+    speak("Hey there! I'm Luna. How's your day been so far?");
   }, 1000);
 }
 
