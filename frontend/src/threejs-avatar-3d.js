@@ -1,6 +1,7 @@
 // ============================================
-// threejs-avatar-3d.js - REPLIKA-STYLE CAMERA
-// Camera frames the ROOM, avatar is placed inside
+// threejs-avatar-3d.js - REPLIKA STYLE + LIVELY ANIMATIONS
+// Old: Room framing, camera, lighting, colors
+// New: Waving, talking gestures, reach toward viewer
 // ============================================
 
 import * as THREE from "three";
@@ -41,7 +42,15 @@ let isGesturing = false;
 let gestureProgress = 0;
 let gestureType = 0;
 
-// Store base rotations for arms
+// NEW: Talking gesture state
+let talkingGestureTimer = 0;
+let currentTalkingGesture = -1;
+
+// NEW: Wave animation state
+let isWaving = false;
+let waveProgress = 0;
+
+// Store base rotations for arms (FROM OLD VERSION)
 let baseRotations = {
   leftUpperArm: { x: 0.2, y: 0, z: 1.0 },
   rightUpperArm: { x: 0.2, y: 0, z: -1.0 },
@@ -52,21 +61,19 @@ let baseRotations = {
 };
 
 // ============================================
-// CONFIGURATION - REPLIKA STYLE
+// CONFIGURATION - REPLIKA STYLE (FROM OLD VERSION)
 // ============================================
 const CONFIG = {
   // ===== AVATAR =====
-  avatarHeight: 1.45,           // Slightly smaller avatar
+  avatarHeight: 1.45,
   
   // ===== CAMERA (FIXED TO ROOM, NOT AVATAR) =====
   cameraX: 0,
   cameraY: 1.4,
-  cameraZ: 2.5,                 // Your setting
-  
+  cameraZ: 2.5,
   lookAtX: 0,
   lookAtY: 0.9,
   lookAtZ: 0,
-  
   cameraFOV: 50,
   
   // ===== AVATAR POSITION IN ROOM =====
@@ -81,39 +88,58 @@ const CONFIG = {
   roomZ: -2,
   
   // ===== ELEGANT COLOR THEME =====
-  // Soft lavender/purple gradient sky
-  skyTopColor: 0x9B8AC4,        // Deeper lavender at top
-  skyMidColor: 0xC4B8D8,        // Mid lavender
-  skyBottomColor: 0xE8E0F0,     // Light lavender/white at horizon
+  skyTopColor: 0x9B8AC4,
+  skyMidColor: 0xC4B8D8,
+  skyBottomColor: 0xE8E0F0,
+  floorCenterColor: 0xE2DEE9,
+  floorEdgeColor: 0xC5BCD4,
   
-  // Floor - soft warm gray that complements purple
-  floorCenterColor: 0xE2DEE9,   // Light warm gray (center, under avatar)
-  floorEdgeColor: 0xC5BCD4,     // Slightly darker lavender-gray at edges
-  
-  // ===== ANIMATIONS =====
+  // ===== BREATHING =====
   breathingSpeed: 0.5,
   breathingAmount: 0.004,
-  lookAroundInterval: 5000,
-  lookAroundDuration: 2500,
-  lookAmountX: 0.1,
-  lookAmountY: 0.05,
-  lookSmoothing: 0.04,
+  shoulderBreathAmount: 0.002,
+  
+  // ===== HEAD/LOOK - More focused on viewer (NEW) =====
+  lookAtViewerChance: 0.7,
+  lookAwayInterval: 4000,
+  lookAwayDuration: 1500,
+  lookAmountX: 0.12,
+  lookAmountY: 0.08,
+  lookSmoothing: 0.06,
+  headTiltAmount: 0.05,
+  
+  // ===== ARM SWAY (idle) =====
   armSwayAmount: 0.008,
   armSwaySpeed: 0.3,
+  
+  // ===== IDLE GESTURES =====
   gestureInterval: 12000,
   gestureDuration: 1800,
   gestureAmount: 0.12,
+  
+  // ===== TALKING GESTURES (NEW) =====
+  talkingGestureInterval: 2500,
+  talkingGestureAmount: 0.2,
+  talkingGestureDuration: 1200,
+  
+  // ===== WAVE ANIMATION (NEW) =====
+  waveDuration: 1800,
+  waveAmount: 0.4,
+  waveSpeed: 12,
+  
+  // ===== BLINK =====
   blinkInterval: 3000,
   blinkVariation: 2000,
   blinkDuration: 120,
   doubleBinkChance: 0.25,
+  
+  // ===== LIP SYNC =====
   lipSyncSmooth: 0.15,
   lipSyncIntensity: 0.8,
-  shoulderBreathAmount: 0.002,
 };
 
 // ============================================
-// INITIALIZE 3D SCENE
+// INITIALIZE 3D SCENE (FROM OLD VERSION)
 // ============================================
 export function init3DScene(containerId = "canvas-container") {
   container = document.getElementById(containerId);
@@ -122,17 +148,15 @@ export function init3DScene(containerId = "canvas-container") {
     return false;
   }
 
-  // Cleanup previous
   if (rafId) {
     cancelAnimationFrame(rafId);
     rafId = null;
   }
   container.querySelectorAll("canvas").forEach(c => c.remove());
 
-  // Create renderer
   renderer = new THREE.WebGLRenderer({ 
     antialias: true, 
-    alpha: true,  // Transparent background
+    alpha: true,
     powerPreference: "high-performance"
   });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -142,7 +166,7 @@ export function init3DScene(containerId = "canvas-container") {
   renderer.toneMappingExposure = 1.2;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  renderer.setClearColor(0x000000, 0); // Transparent
+  renderer.setClearColor(0x000000, 0);
   
   renderer.domElement.style.display = "block";
   renderer.domElement.style.width = "100%";
@@ -150,14 +174,10 @@ export function init3DScene(containerId = "canvas-container") {
   
   container.appendChild(renderer.domElement);
 
-  // Create scene
   scene = new THREE.Scene();
-  // No background - will be transparent or CSS handles it
   
-  // Create fallback environment
   createFallbackEnvironment();
   
-  // Create camera - FIXED POSITION (not following avatar)
   camera = new THREE.PerspectiveCamera(
     CONFIG.cameraFOV,
     container.clientWidth / container.clientHeight,
@@ -165,17 +185,13 @@ export function init3DScene(containerId = "canvas-container") {
     100
   );
   
-  // Position camera
   camera.position.set(CONFIG.cameraX, CONFIG.cameraY, CONFIG.cameraZ);
   camera.lookAt(CONFIG.lookAtX, CONFIG.lookAtY, CONFIG.lookAtZ);
   
-  // Setup lights
   setupLights();
 
-  // Event listeners
   window.addEventListener("resize", onResize, { passive: true });
 
-  // Start animation loop
   animate();
 
   console.log("[3D] ✅ Scene initialized (Replika-style camera)");
@@ -183,10 +199,9 @@ export function init3DScene(containerId = "canvas-container") {
 }
 
 // ============================================
-// CREATE FALLBACK ENVIRONMENT
+// CREATE FALLBACK ENVIRONMENT (FROM OLD VERSION)
 // ============================================
 function createFallbackEnvironment() {
-  // Beautiful gradient sky (3-color gradient for elegance)
   const skyGeo = new THREE.SphereGeometry(50, 64, 64);
   const skyMat = new THREE.ShaderMaterial({
     uniforms: {
@@ -211,10 +226,8 @@ function createFallbackEnvironment() {
         float h = normalize(vWorldPosition).y;
         vec3 color;
         if (h > 0.0) {
-          // Upper half: mid to top
           color = mix(midColor, topColor, smoothstep(0.0, 0.8, h));
         } else {
-          // Lower half: bottom to mid (horizon area)
           color = mix(bottomColor, midColor, smoothstep(-0.3, 0.0, h));
         }
         gl_FragColor = vec4(color, 1.0);
@@ -226,10 +239,9 @@ function createFallbackEnvironment() {
   
   fallbackSky = new THREE.Mesh(skyGeo, skyMat);
   fallbackSky.name = "fallbackSky";
-  fallbackSky.visible = true;  // VISIBLE BY DEFAULT
+  fallbackSky.visible = true;
   scene.add(fallbackSky);
 
-  // Elegant floor with radial gradient (lighter in center, darker at edges)
   const groundGeo = new THREE.PlaneGeometry(60, 60, 1, 1);
   const groundMat = new THREE.ShaderMaterial({
     uniforms: {
@@ -250,16 +262,11 @@ function createFallbackEnvironment() {
       uniform vec2 avatarPos;
       varying vec2 vUv;
       void main() {
-        // Radial gradient from avatar position
         float dist = distance(vUv, avatarPos);
-        // Smooth falloff
         float gradient = smoothstep(0.0, 0.5, dist);
         vec3 color = mix(centerColor, edgeColor, gradient);
-        
-        // Add subtle vignette at far edges
         float vignette = smoothstep(0.7, 1.0, dist) * 0.15;
         color = mix(color, edgeColor * 0.9, vignette);
-        
         gl_FragColor = vec4(color, 1.0);
       }
     `
@@ -267,27 +274,25 @@ function createFallbackEnvironment() {
   
   fallbackGround = new THREE.Mesh(groundGeo, groundMat);
   fallbackGround.rotation.x = -Math.PI / 2;
-  fallbackGround.position.y = -0.01;  // Slightly below 0 to avoid z-fighting
+  fallbackGround.position.y = -0.01;
   fallbackGround.receiveShadow = true;
   fallbackGround.name = "fallbackGround";
-  fallbackGround.visible = true;  // VISIBLE BY DEFAULT
+  fallbackGround.visible = true;
   scene.add(fallbackGround);
   
   console.log("[3D] ✅ Elegant environment created");
 }
 
 // ============================================
-// SETUP LIGHTING (Replika-style soft ambient)
+// SETUP LIGHTING (FROM OLD VERSION - Replika-style)
 // ============================================
 function setupLights() {
-  // Clear existing lights
   const lightsToRemove = [];
   scene.traverse((obj) => {
     if (obj.isLight) lightsToRemove.push(obj);
   });
   lightsToRemove.forEach(l => scene.remove(l));
 
-  // Main directional light (soft key light)
   const mainLight = new THREE.DirectionalLight(0xffffff, 0.9);
   mainLight.position.set(3, 6, 4);
   mainLight.castShadow = true;
@@ -302,21 +307,17 @@ function setupLights() {
   mainLight.shadow.bias = -0.0001;
   scene.add(mainLight);
 
-  // Fill light (soft pink tone like Replika)
   const fillLight = new THREE.DirectionalLight(0xFFE4EC, 0.4);
   fillLight.position.set(-4, 3, 2);
   scene.add(fillLight);
 
-  // Rim/back light (soft blue)
   const rimLight = new THREE.DirectionalLight(0xE4E4FF, 0.3);
   rimLight.position.set(0, 4, -4);
   scene.add(rimLight);
 
-  // Strong ambient for soft look
   const ambient = new THREE.AmbientLight(0xffffff, 0.6);
   scene.add(ambient);
 
-  // Hemisphere light (purple/pink tones like Replika)
   const hemi = new THREE.HemisphereLight(0xC9B8E8, 0xE8D4E8, 0.5);
   scene.add(hemi);
   
@@ -324,7 +325,7 @@ function setupLights() {
 }
 
 // ============================================
-// LOAD VRM AVATAR
+// LOAD VRM AVATAR (FROM OLD VERSION + NEW wave)
 // ============================================
 export async function loadVRMAvatar(vrmPath) {
   console.log("[3D] Loading VRM:", vrmPath);
@@ -332,7 +333,6 @@ export async function loadVRMAvatar(vrmPath) {
   const loadingEl = document.getElementById("loading-indicator");
   if (loadingEl) loadingEl.classList.add("active");
 
-  // Remove existing VRM
   if (currentVRM) {
     scene.remove(currentVRM.scene);
     VRMUtils.deepDispose(currentVRM.scene);
@@ -356,14 +356,11 @@ export async function loadVRMAvatar(vrmPath) {
           return;
         }
 
-        // Optimize
         VRMUtils.removeUnnecessaryVertices(gltf.scene);
         VRMUtils.removeUnnecessaryJoints(gltf.scene);
 
-        // Rotate to face camera
         vrm.scene.rotation.y = Math.PI;
 
-        // Calculate bounds and scale
         const box = new THREE.Box3().setFromObject(vrm.scene);
         const size = box.getSize(new THREE.Vector3());
         const center = box.getCenter(new THREE.Vector3());
@@ -371,14 +368,12 @@ export async function loadVRMAvatar(vrmPath) {
         const scale = CONFIG.avatarHeight / size.y;
         vrm.scene.scale.setScalar(scale);
 
-        // Position avatar at configured spot
         vrm.scene.position.set(
           CONFIG.avatarX - center.x * scale,
-          CONFIG.avatarY - box.min.y * scale,  // Feet on ground
+          CONFIG.avatarY - box.min.y * scale,
           CONFIG.avatarZ - center.z * scale
         );
 
-        // Enable shadows
         vrm.scene.traverse((obj) => {
           if (obj.isMesh) {
             obj.castShadow = true;
@@ -386,27 +381,34 @@ export async function loadVRMAvatar(vrmPath) {
           }
         });
 
-        // Add directly to scene
         scene.add(vrm.scene);
         
         currentVRM = vrm;
         avatarReady = true;
 
-        // Reset animation timers
+        // Reset all timers
         idleTime = 0;
         blinkTimer = 0;
         gestureTimer = 0;
         lookTimer = 0;
+        talkingGestureTimer = 0;
         lookTarget = { x: 0, y: 0 };
         currentLook = { x: 0, y: 0 };
         isGesturing = false;
+        isWaving = false;
+        currentTalkingGesture = -1;
 
-        // Set relaxed pose
         setRelaxedPose(vrm);
 
         if (loadingEl) loadingEl.classList.remove("active");
 
         console.log("[3D] ✅ VRM loaded at position:", vrm.scene.position);
+        
+        // NEW: Welcome wave after loading
+        setTimeout(() => {
+          if (avatarReady) triggerWave();
+        }, 500);
+        
         resolve(vrm);
       },
       (progress) => {
@@ -425,7 +427,7 @@ export async function loadVRMAvatar(vrmPath) {
 }
 
 // ============================================
-// LOAD ROOM MODEL
+// LOAD ROOM MODEL (FROM OLD VERSION)
 // ============================================
 export async function loadRoomModel(glbPath) {
   console.log("[3D] Loading room:", glbPath);
@@ -433,7 +435,6 @@ export async function loadRoomModel(glbPath) {
   const loadingEl = document.getElementById("loading-indicator");
   if (loadingEl) loadingEl.classList.add("active");
 
-  // Remove existing room
   if (currentRoom) {
     scene.remove(currentRoom);
     currentRoom = null;
@@ -447,28 +448,23 @@ export async function loadRoomModel(glbPath) {
       (gltf) => {
         const room = gltf.scene;
 
-        // Calculate room bounds
         const box = new THREE.Box3().setFromObject(room);
         const size = box.getSize(new THREE.Vector3());
         const center = box.getCenter(new THREE.Vector3());
 
         console.log("[3D] Room original size:", size.x.toFixed(2), "x", size.y.toFixed(2), "x", size.z.toFixed(2));
 
-        // Scale room
         room.scale.setScalar(CONFIG.roomScale);
 
-        // Recalculate after scaling
         box.setFromObject(room);
         const scaledCenter = box.getCenter(new THREE.Vector3());
 
-        // Position room: floor at y=0, centered, pushed back
         room.position.set(
           CONFIG.roomX - scaledCenter.x,
           CONFIG.roomY - box.min.y,
           CONFIG.roomZ - scaledCenter.z
         );
 
-        // Enable shadows and fix materials
         room.traverse((obj) => {
           if (obj.isMesh) {
             obj.castShadow = true;
@@ -479,15 +475,9 @@ export async function loadRoomModel(glbPath) {
           }
         });
 
-        // Add to scene
         scene.add(room);
         currentRoom = room;
         hasRoomLoaded = true;
-
-        // Keep sky visible for nice background colors
-        // Only hide ground if room has its own floor
-        // if (fallbackSky) fallbackSky.visible = false;
-        // if (fallbackGround) fallbackGround.visible = false;
 
         if (loadingEl) loadingEl.classList.remove("active");
 
@@ -511,7 +501,7 @@ export async function loadRoomModel(glbPath) {
 }
 
 // ============================================
-// USE FALLBACK ENVIRONMENT
+// USE FALLBACK ENVIRONMENT (FROM OLD VERSION)
 // ============================================
 export function useFallbackEnvironment() {
   if (currentRoom) {
@@ -528,7 +518,7 @@ export function useFallbackEnvironment() {
 }
 
 // ============================================
-// ADJUST CAMERA (for fine-tuning)
+// CAMERA CONTROLS (FROM OLD VERSION)
 // ============================================
 export function setCameraPosition(x, y, z) {
   if (camera) {
@@ -551,7 +541,7 @@ export function setCameraFOV(fov) {
 }
 
 // ============================================
-// ADJUST AVATAR POSITION (for fine-tuning)
+// POSITION CONTROLS (FROM OLD VERSION)
 // ============================================
 export function setAvatarPosition(x, y, z) {
   if (currentVRM) {
@@ -560,9 +550,6 @@ export function setAvatarPosition(x, y, z) {
   }
 }
 
-// ============================================
-// ADJUST ROOM (for fine-tuning)
-// ============================================
 export function setRoomPosition(x, y, z) {
   if (currentRoom) {
     const box = new THREE.Box3().setFromObject(currentRoom);
@@ -573,14 +560,13 @@ export function setRoomPosition(x, y, z) {
 export function setRoomScale(scale) {
   if (currentRoom) {
     currentRoom.scale.setScalar(scale);
-    // Re-ground after scaling
     const box = new THREE.Box3().setFromObject(currentRoom);
     currentRoom.position.y = -box.min.y;
   }
 }
 
 // ============================================
-// SET RELAXED POSE
+// SET RELAXED POSE (FROM OLD VERSION)
 // ============================================
 function setRelaxedPose(vrm) {
   if (!vrm?.humanoid) return;
@@ -596,32 +582,16 @@ function setRelaxedPose(vrm) {
     };
 
     if (bones.leftUpperArm) {
-      bones.leftUpperArm.rotation.set(
-        baseRotations.leftUpperArm.x,
-        baseRotations.leftUpperArm.y,
-        baseRotations.leftUpperArm.z
-      );
+      bones.leftUpperArm.rotation.set(baseRotations.leftUpperArm.x, baseRotations.leftUpperArm.y, baseRotations.leftUpperArm.z);
     }
     if (bones.rightUpperArm) {
-      bones.rightUpperArm.rotation.set(
-        baseRotations.rightUpperArm.x,
-        baseRotations.rightUpperArm.y,
-        baseRotations.rightUpperArm.z
-      );
+      bones.rightUpperArm.rotation.set(baseRotations.rightUpperArm.x, baseRotations.rightUpperArm.y, baseRotations.rightUpperArm.z);
     }
     if (bones.leftLowerArm) {
-      bones.leftLowerArm.rotation.set(
-        baseRotations.leftLowerArm.x,
-        baseRotations.leftLowerArm.y,
-        baseRotations.leftLowerArm.z
-      );
+      bones.leftLowerArm.rotation.set(baseRotations.leftLowerArm.x, baseRotations.leftLowerArm.y, baseRotations.leftLowerArm.z);
     }
     if (bones.rightLowerArm) {
-      bones.rightLowerArm.rotation.set(
-        baseRotations.rightLowerArm.x,
-        baseRotations.rightLowerArm.y,
-        baseRotations.rightLowerArm.z
-      );
+      bones.rightLowerArm.rotation.set(baseRotations.rightLowerArm.x, baseRotations.rightLowerArm.y, baseRotations.rightLowerArm.z);
     }
 
     console.log("[3D] ✅ Relaxed pose applied");
@@ -631,7 +601,68 @@ function setRelaxedPose(vrm) {
 }
 
 // ============================================
-// IDLE ANIMATIONS
+// NEW: TRIGGER WAVE - Call for greeting!
+// ============================================
+export function triggerWave() {
+  if (!avatarReady || isWaving) return;
+  isWaving = true;
+  waveProgress = 0;
+  console.log("[3D] 👋 Waving!");
+}
+
+// ============================================
+// NEW: UPDATE WAVE ANIMATION
+// ============================================
+function updateWaveAnimation(delta) {
+  if (!isWaving || !currentVRM?.humanoid) return;
+  
+  waveProgress += delta * 1000;
+  const duration = CONFIG.waveDuration;
+  const progress = Math.min(waveProgress / duration, 1);
+  
+  let raiseAmount;
+  if (progress < 0.25) {
+    raiseAmount = progress / 0.25;
+  } else if (progress < 0.75) {
+    raiseAmount = 1;
+  } else {
+    raiseAmount = (1 - progress) / 0.25;
+  }
+  
+  const rightUpperArm = currentVRM.humanoid.getNormalizedBoneNode("rightUpperArm");
+  const rightLowerArm = currentVRM.humanoid.getNormalizedBoneNode("rightLowerArm");
+  const rightHand = currentVRM.humanoid.getNormalizedBoneNode("rightHand");
+  
+  if (rightUpperArm) {
+    rightUpperArm.rotation.x = baseRotations.rightUpperArm.x - raiseAmount * 0.8;
+    rightUpperArm.rotation.z = baseRotations.rightUpperArm.z + raiseAmount * 0.6;
+  }
+  
+  if (rightLowerArm) {
+    rightLowerArm.rotation.y = baseRotations.rightLowerArm.y - raiseAmount * 1.2;
+  }
+  
+  if (rightHand && progress > 0.2 && progress < 0.8) {
+    const waveTime = waveProgress * 0.001 * CONFIG.waveSpeed;
+    rightHand.rotation.z = Math.sin(waveTime) * CONFIG.waveAmount;
+  }
+  
+  if (progress >= 1) {
+    isWaving = false;
+    if (rightUpperArm) {
+      rightUpperArm.rotation.set(baseRotations.rightUpperArm.x, baseRotations.rightUpperArm.y, baseRotations.rightUpperArm.z);
+    }
+    if (rightLowerArm) {
+      rightLowerArm.rotation.set(baseRotations.rightLowerArm.x, baseRotations.rightLowerArm.y, baseRotations.rightLowerArm.z);
+    }
+    if (rightHand) {
+      rightHand.rotation.set(0, 0, baseRotations.rightHand.z);
+    }
+  }
+}
+
+// ============================================
+// IDLE ANIMATIONS (MERGED: Old base + New additions)
 // ============================================
 function updateIdleAnimation(delta) {
   if (!currentVRM || !avatarReady) return;
@@ -639,10 +670,21 @@ function updateIdleAnimation(delta) {
   
   updateBreathing();
   updateHeadMovement(delta);
-  updateArmMovement();
-  updateGestures(delta);
+  
+  // Skip arm animations if waving
+  if (!isWaving) {
+    if (isTalking) {
+      updateTalkingGestures(delta);
+    } else {
+      updateArmMovement();
+      updateGestures(delta);
+    }
+  }
 }
 
+// ============================================
+// BREATHING (FROM OLD VERSION)
+// ============================================
 function updateBreathing() {
   if (!currentVRM?.humanoid) return;
 
@@ -664,6 +706,9 @@ function updateBreathing() {
   if (rightShoulder) rightShoulder.position.y = breathCycle * CONFIG.shoulderBreathAmount;
 }
 
+// ============================================
+// HEAD MOVEMENT (ENHANCED: More focus on viewer)
+// ============================================
 function updateHeadMovement(delta) {
   if (!currentVRM?.humanoid) return;
 
@@ -674,15 +719,23 @@ function updateHeadMovement(delta) {
 
   lookTimer += delta * 1000;
 
-  if (lookTimer > CONFIG.lookAroundInterval + Math.random() * CONFIG.lookAroundDuration) {
-    lookTarget.x = (Math.random() - 0.5) * 2 * CONFIG.lookAmountX;
-    lookTarget.y = (Math.random() - 0.5) * 2 * CONFIG.lookAmountY;
+  if (lookTimer > CONFIG.lookAwayInterval + Math.random() * 2000) {
+    if (Math.random() < CONFIG.lookAtViewerChance) {
+      // Look at viewer (center with slight variation)
+      lookTarget.x = (Math.random() - 0.5) * 0.04;
+      lookTarget.y = (Math.random() - 0.5) * 0.03;
+    } else {
+      // Look away briefly
+      lookTarget.x = (Math.random() - 0.5) * 2 * CONFIG.lookAmountX;
+      lookTarget.y = (Math.random() - 0.5) * 2 * CONFIG.lookAmountY;
+    }
     lookTimer = 0;
   }
 
-  if (lookTimer > CONFIG.lookAroundDuration && lookTimer < CONFIG.lookAroundInterval) {
-    lookTarget.x *= 0.98;
-    lookTarget.y *= 0.98;
+  // Return to viewer after looking away
+  if (lookTimer > CONFIG.lookAwayDuration && Math.abs(lookTarget.x) > 0.05) {
+    lookTarget.x *= 0.95;
+    lookTarget.y *= 0.95;
   }
 
   currentLook.x += (lookTarget.x - currentLook.x) * CONFIG.lookSmoothing;
@@ -690,6 +743,9 @@ function updateHeadMovement(delta) {
 
   head.rotation.y = currentLook.x;
   head.rotation.x = currentLook.y;
+  
+  // NEW: Subtle head tilt (shows interest)
+  head.rotation.z = Math.sin(idleTime * 0.3) * CONFIG.headTiltAmount;
 
   if (neck) {
     neck.rotation.y = currentLook.x * 0.3;
@@ -697,6 +753,9 @@ function updateHeadMovement(delta) {
   }
 }
 
+// ============================================
+// ARM MOVEMENT (FROM OLD VERSION)
+// ============================================
 function updateArmMovement() {
   if (!currentVRM?.humanoid || isGesturing) return;
 
@@ -713,6 +772,9 @@ function updateArmMovement() {
   }
 }
 
+// ============================================
+// IDLE GESTURES (FROM OLD VERSION)
+// ============================================
 function updateGestures(delta) {
   if (!currentVRM?.humanoid) return;
 
@@ -765,7 +827,136 @@ function updateGestures(delta) {
 }
 
 // ============================================
-// BLINKING
+// NEW: TALKING GESTURES - Expressive!
+// ============================================
+function updateTalkingGestures(delta) {
+  if (!currentVRM?.humanoid || !isTalking) return;
+  
+  talkingGestureTimer += delta * 1000;
+  
+  if (currentTalkingGesture === -1 || talkingGestureTimer > CONFIG.talkingGestureInterval) {
+    currentTalkingGesture = Math.floor(Math.random() * 6);
+    talkingGestureTimer = 0;
+    gestureProgress = 0;
+  }
+  
+  gestureProgress += delta * 1000;
+  const duration = CONFIG.talkingGestureDuration;
+  
+  let intensity;
+  if (gestureProgress < duration * 0.25) {
+    intensity = easeOutCubic(gestureProgress / (duration * 0.25));
+  } else if (gestureProgress < duration * 0.6) {
+    intensity = 1;
+  } else if (gestureProgress < duration) {
+    intensity = 1 - easeInCubic((gestureProgress - duration * 0.6) / (duration * 0.4));
+  } else {
+    intensity = 0;
+  }
+  
+  applyTalkingGesture(intensity);
+}
+
+function applyTalkingGesture(intensity) {
+  if (!currentVRM?.humanoid) return;
+  
+  const rightUpperArm = currentVRM.humanoid.getNormalizedBoneNode("rightUpperArm");
+  const rightLowerArm = currentVRM.humanoid.getNormalizedBoneNode("rightLowerArm");
+  const rightHand = currentVRM.humanoid.getNormalizedBoneNode("rightHand");
+  const leftUpperArm = currentVRM.humanoid.getNormalizedBoneNode("leftUpperArm");
+  const leftLowerArm = currentVRM.humanoid.getNormalizedBoneNode("leftLowerArm");
+  
+  const amount = CONFIG.talkingGestureAmount * intensity;
+  const variation = Math.sin(idleTime * 3) * 0.02;
+  
+  switch (currentTalkingGesture) {
+    case 0: // Right hand emphasis
+      if (rightUpperArm) {
+        rightUpperArm.rotation.z = baseRotations.rightUpperArm.z + amount * 0.8;
+        rightUpperArm.rotation.x = baseRotations.rightUpperArm.x - amount * 0.4;
+      }
+      if (rightLowerArm) {
+        rightLowerArm.rotation.y = baseRotations.rightLowerArm.y - amount * 0.5;
+      }
+      if (rightHand) {
+        rightHand.rotation.x = amount * 0.3 + variation;
+      }
+      break;
+      
+    case 1: // Left hand emphasis
+      if (leftUpperArm) {
+        leftUpperArm.rotation.z = baseRotations.leftUpperArm.z - amount * 0.8;
+        leftUpperArm.rotation.x = baseRotations.leftUpperArm.x - amount * 0.4;
+      }
+      if (leftLowerArm) {
+        leftLowerArm.rotation.y = baseRotations.leftLowerArm.y + amount * 0.5;
+      }
+      break;
+      
+    case 2: // Both hands open
+      if (rightUpperArm) {
+        rightUpperArm.rotation.z = baseRotations.rightUpperArm.z + amount * 0.6;
+      }
+      if (leftUpperArm) {
+        leftUpperArm.rotation.z = baseRotations.leftUpperArm.z - amount * 0.6;
+      }
+      if (rightLowerArm) {
+        rightLowerArm.rotation.y = baseRotations.rightLowerArm.y - amount * 0.3;
+      }
+      if (leftLowerArm) {
+        leftLowerArm.rotation.y = baseRotations.leftLowerArm.y + amount * 0.3;
+      }
+      break;
+      
+    case 3: // Point forward
+      if (rightUpperArm) {
+        rightUpperArm.rotation.x = baseRotations.rightUpperArm.x - amount * 0.6;
+        rightUpperArm.rotation.z = baseRotations.rightUpperArm.z + amount * 0.4;
+      }
+      if (rightLowerArm) {
+        rightLowerArm.rotation.y = baseRotations.rightLowerArm.y - amount * 0.4;
+      }
+      break;
+      
+    case 4: // Hands together
+      if (rightUpperArm) {
+        rightUpperArm.rotation.z = baseRotations.rightUpperArm.z + amount * 0.4;
+        rightUpperArm.rotation.x = baseRotations.rightUpperArm.x - amount * 0.3;
+      }
+      if (leftUpperArm) {
+        leftUpperArm.rotation.z = baseRotations.leftUpperArm.z - amount * 0.4;
+        leftUpperArm.rotation.x = baseRotations.leftUpperArm.x - amount * 0.3;
+      }
+      if (rightLowerArm) {
+        rightLowerArm.rotation.y = baseRotations.rightLowerArm.y - amount * 0.6;
+      }
+      if (leftLowerArm) {
+        leftLowerArm.rotation.y = baseRotations.leftLowerArm.y + amount * 0.6;
+      }
+      break;
+      
+    case 5: // Reach toward viewer
+      if (rightUpperArm) {
+        rightUpperArm.rotation.x = baseRotations.rightUpperArm.x - amount * 0.5;
+        rightUpperArm.rotation.z = baseRotations.rightUpperArm.z + amount * 0.3;
+      }
+      if (rightLowerArm) {
+        rightLowerArm.rotation.x = -amount * 0.2;
+        rightLowerArm.rotation.y = baseRotations.rightLowerArm.y - amount * 0.3;
+      }
+      if (rightHand) {
+        rightHand.rotation.x = -amount * 0.2;
+      }
+      break;
+  }
+}
+
+// Easing functions
+function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
+function easeInCubic(t) { return t * t * t; }
+
+// ============================================
+// BLINKING (FROM OLD VERSION)
 // ============================================
 function updateBlinking(delta) {
   if (!currentVRM?.expressionManager) return;
@@ -805,7 +996,7 @@ function updateBlinking(delta) {
 }
 
 // ============================================
-// LIP SYNC
+// LIP SYNC (FROM OLD VERSION)
 // ============================================
 function updateLipSync() {
   if (!currentVRM?.expressionManager) return;
@@ -827,10 +1018,12 @@ function updateLipSync() {
 }
 
 // ============================================
-// TALKING CONTROL
+// TALKING CONTROL (ENHANCED)
 // ============================================
 export function avatarStartTalking() {
   isTalking = true;
+  currentTalkingGesture = -1;
+  talkingGestureTimer = 0;
   console.log("[3D] 🗣️ Avatar started talking");
   animateTalking();
 }
@@ -838,6 +1031,7 @@ export function avatarStartTalking() {
 export function avatarStopTalking() {
   isTalking = false;
   targetMouthOpenness = 0;
+  currentTalkingGesture = -1;
   
   if (currentVRM?.expressionManager) {
     const expr = currentVRM.expressionManager;
@@ -867,7 +1061,7 @@ function animateTalking() {
 }
 
 // ============================================
-// SET EXPRESSION
+// SET EXPRESSION (FROM OLD VERSION)
 // ============================================
 export function setExpression(name, value = 1.0, duration = 0) {
   if (!currentVRM?.expressionManager) return;
@@ -887,7 +1081,7 @@ export function setExpression(name, value = 1.0, duration = 0) {
 }
 
 // ============================================
-// ANIMATION LOOP
+// ANIMATION LOOP (ENHANCED with wave)
 // ============================================
 function animate() {
   rafId = requestAnimationFrame(animate);
@@ -897,6 +1091,7 @@ function animate() {
   if (currentVRM && avatarReady) {
     updateIdleAnimation(delta);
     updateBlinking(delta);
+    updateWaveAnimation(delta);
     
     if (isTalking) {
       updateLipSync();
@@ -911,7 +1106,7 @@ function animate() {
 }
 
 // ============================================
-// RESIZE HANDLER
+// RESIZE HANDLER (FROM OLD VERSION)
 // ============================================
 function onResize() {
   if (!container || !camera || !renderer) return;
@@ -922,7 +1117,7 @@ function onResize() {
 }
 
 // ============================================
-// CHANGE COLORS (for easy customization)
+// COLOR CUSTOMIZATION (FROM OLD VERSION)
 // ============================================
 export function setSkyColors(topColor, midColor, bottomColor) {
   if (fallbackSky && fallbackSky.material.uniforms) {
@@ -939,51 +1134,14 @@ export function setFloorColors(centerColor, edgeColor) {
   }
 }
 
-// Preset color themes
 export function setColorTheme(theme) {
   const themes = {
-    lavender: {
-      skyTop: 0x9B8AC4,
-      skyMid: 0xC4B8D8,
-      skyBottom: 0xE8E0F0,
-      floorCenter: 0xE8E4EC,
-      floorEdge: 0xD0C8D8
-    },
-    sunset: {
-      skyTop: 0x4A3F6B,
-      skyMid: 0xC97B84,
-      skyBottom: 0xF2D7D9,
-      floorCenter: 0xF5E6E8,
-      floorEdge: 0xE8D0D4
-    },
-    ocean: {
-      skyTop: 0x1E3A5F,
-      skyMid: 0x6B9AC4,
-      skyBottom: 0xD4E6F1,
-      floorCenter: 0xE8F4F8,
-      floorEdge: 0xC8DCE8
-    },
-    mint: {
-      skyTop: 0x4A7C6F,
-      skyMid: 0x8FBCB0,
-      skyBottom: 0xD8EDE8,
-      floorCenter: 0xE8F2EF,
-      floorEdge: 0xC8DCD8
-    },
-    warm: {
-      skyTop: 0x8B7355,
-      skyMid: 0xC4A882,
-      skyBottom: 0xF0E6D8,
-      floorCenter: 0xF5EDE0,
-      floorEdge: 0xE0D4C4
-    },
-    pink: {
-      skyTop: 0xB76E99,
-      skyMid: 0xDBA8C4,
-      skyBottom: 0xF8E8F0,
-      floorCenter: 0xFAF0F5,
-      floorEdge: 0xECD8E4
-    }
+    lavender: { skyTop: 0x9B8AC4, skyMid: 0xC4B8D8, skyBottom: 0xE8E0F0, floorCenter: 0xE8E4EC, floorEdge: 0xD0C8D8 },
+    sunset: { skyTop: 0x4A3F6B, skyMid: 0xC97B84, skyBottom: 0xF2D7D9, floorCenter: 0xF5E6E8, floorEdge: 0xE8D0D4 },
+    ocean: { skyTop: 0x1E3A5F, skyMid: 0x6B9AC4, skyBottom: 0xD4E6F1, floorCenter: 0xE8F4F8, floorEdge: 0xC8DCE8 },
+    mint: { skyTop: 0x4A7C6F, skyMid: 0x8FBCB0, skyBottom: 0xD8EDE8, floorCenter: 0xE8F2EF, floorEdge: 0xC8DCD8 },
+    warm: { skyTop: 0x8B7355, skyMid: 0xC4A882, skyBottom: 0xF0E6D8, floorCenter: 0xF5EDE0, floorEdge: 0xE0D4C4 },
+    pink: { skyTop: 0xB76E99, skyMid: 0xDBA8C4, skyBottom: 0xF8E8F0, floorCenter: 0xFAF0F5, floorEdge: 0xECD8E4 }
   };
   
   const t = themes[theme];
@@ -995,7 +1153,7 @@ export function setColorTheme(theme) {
 }
 
 // ============================================
-// CLEANUP
+// CLEANUP (FROM OLD VERSION)
 // ============================================
 export function dispose3D() {
   console.log("[3D] Disposing scene...");
@@ -1032,7 +1190,7 @@ export function dispose3D() {
 }
 
 // ============================================
-// UTILITY EXPORTS
+// UTILITY EXPORTS (FROM OLD VERSION)
 // ============================================
 export function isAvatarReady() { return avatarReady; }
 export function getVRM() { return currentVRM; }
