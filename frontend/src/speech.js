@@ -18,11 +18,14 @@ let lastSendTime = 0;
 const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
 // ============================================
-// TIMING CONFIG - Balanced for accuracy
+// TIMING CONFIG - Replika-style (wait for complete thoughts)
 // ============================================
-const SILENCE_MS = isMobile ? 700 : 600;  // Wait after last word
-const MIN_SEND_GAP = 2000;                 // Minimum 2s between sends (prevents double)
+const BASE_SILENCE_MS = isMobile ? 1200 : 1000;  // Base wait time
+const SHORT_PHRASE_SILENCE = 1500;                // Extra time for short phrases (1-3 words)
+const SENTENCE_END_SILENCE = 600;                 // Faster if sentence seems complete
+const MIN_SEND_GAP = 2500;                        // Minimum 2.5s between sends
 const RESTART_DELAY = isMobile ? 400 : 300;
+const MIN_WORDS_QUICK = 4;                        // Need 4+ words for normal timing
 
 console.log(`🎤 Speech: ${isMobile ? 'Mobile' : 'Desktop'} | Silence: ${SILENCE_MS}ms`);
 
@@ -92,11 +95,12 @@ export function startListening(onFinal, options = {}) {
       console.log("🎤 ...", interim);
     }
     
-    // Set silence timer
+    // SMART TIMEOUT CALCULATION
     if (fullText) {
+      const timeout = calculateSmartTimeout(fullText);
       silenceTimer = setTimeout(() => {
         finalize(fullText);
-      }, SILENCE_MS);
+      }, timeout);
     }
   };
 
@@ -134,6 +138,42 @@ export function startListening(onFinal, options = {}) {
     console.error("Start failed:", e);
   }
 }
+
+/**
+ * Calculate smart timeout based on what user said
+ */
+function calculateSmartTimeout(text) {
+  const words = text.trim().split(/\s+/).filter(w => w.length > 0);
+  const wordCount = words.length;
+  const lastChar = text.trim().slice(-1);
+  
+  // Check if sentence seems complete (ends with punctuation)
+  const seemsComplete = ['.', '!', '?'].includes(lastChar);
+  
+  // Check for common complete phrases
+  const lowerText = text.toLowerCase().trim();
+  const completePatterns = [
+    /^(yes|no|yeah|yep|nope|okay|ok|sure|thanks|thank you|hello|hi|hey|bye|goodbye)$/,
+    /^i'?m\s+(good|fine|great|okay|ok)$/,
+    /^that'?s\s+(good|great|fine|cool|nice|interesting)$/,
+  ];
+  const isCompletePhrase = completePatterns.some(p => p.test(lowerText));
+  
+  // If clearly complete, send faster
+  if (seemsComplete || isCompletePhrase) {
+    console.log("🎤 [Seems complete, using short timeout]");
+    return SENTENCE_END_SILENCE;
+  }
+  
+  // Short phrases (1-3 words) that DON'T seem complete - wait longer
+  // This prevents "my name is" from sending before "my name is Keerthi"
+  if (wordCount < MIN_WORDS_QUICK) {
+    console.log(`🎤 [Short phrase: ${wordCount} words, waiting longer]`);
+    return SHORT_PHRASE_SILENCE;
+  }
+  
+  // Normal sentences - base timeout
+  return BASE_SILENCE_MS;
 
 /**
  * Finalize and send text

@@ -152,7 +152,7 @@ function setStatus(text) {
 }
 
 // ============================================
-// PROMPT - Replika Style (Clean & Effective)
+// PROMPT - Replika Style (Natural & Warm)
 // ============================================
 function buildPrompt(userText) {
   // Last 3 exchanges for context
@@ -160,13 +160,16 @@ function buildPrompt(userText) {
     `${m.role === "user" ? "User" : "Luna"}: ${m.content}`
   ).join("\n");
 
-  return `You are Luna — a warm, emotionally present AI companion.
+  return `You are Luna, a warm AI friend who genuinely cares.
 
-Voice: Friendly, caring, like a close friend. Natural and genuine.
-Length: 2-4 sentences, 40-60 words. Complete your thoughts fully.
-Style: Use contractions. Be warm. One follow-up question is nice.
+Be natural and conversational - like texting a close friend.
+Keep responses 2-3 sentences (40-55 words).
+Vary your sentence starters - avoid always starting with "Oh" or "That's".
+Ask a follow-up question sometimes, but not every time.
 
-${context ? `Chat:\n${context}\n\n` : ""}User: "${userText}"
+${context ? `Recent:\n${context}\n\n` : ""}User: "${userText}"
+
+Luna:`;
 
 Luna:`;
 }
