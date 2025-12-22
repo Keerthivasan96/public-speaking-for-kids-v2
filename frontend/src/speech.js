@@ -25,7 +25,7 @@ const CONFIG = {
   shortPhraseSilence: 550,                    // Wait longer for incomplete
   completeSilence: 180,                        // Quick send for complete
   
-  minSendGap: 1000,
+  minSendGap: 900,
   restartDelay: isMobile ? 200 : 90,
   minWordsForNormal: 3,                        // Need 4+ words for normal timing
 };
