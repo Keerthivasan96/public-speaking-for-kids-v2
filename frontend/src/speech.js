@@ -21,9 +21,9 @@ const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/
 // BALANCED TIMING - Not too fast, not too slow
 // ============================================
 const CONFIG = {
-  baseSilence: isMobile ? 700 : 600,           // Normal sentences
-  shortPhraseSilence: 1000,                    // Wait longer for incomplete
-  completeSilence: 350,                        // Quick send for complete
+  baseSilence: isMobile ? 700 : 400,           // Normal sentences
+  shortPhraseSilence: 900,                    // Wait longer for incomplete
+  completeSilence: 300,                        // Quick send for complete
   
   minSendGap: 1500,
   restartDelay: isMobile ? 200 : 150,
