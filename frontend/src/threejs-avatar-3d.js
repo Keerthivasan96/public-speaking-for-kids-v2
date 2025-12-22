@@ -564,11 +564,15 @@ function updateWaveAnimation(delta) {
   // ===============================
   // Upper arm — FORCE toward camera
   // ===============================
-  if (rUA) {
-  rUA.rotation.x = baseRotations.rightUpperArm.x - raise * 1.1; // lift forward
-  rUA.rotation.y = 0;                                           // IMPORTANT: neutral
-  rUA.rotation.z = baseRotations.rightUpperArm.z - raise * 0.6; // NEGATIVE = toward camera
+  // ===============================
+// Upper arm — FORCE toward camera
+// ===============================
+if (rUA) {
+  rUA.rotation.x = baseRotations.rightUpperArm.x - raise * 1.2; // forward
+  rUA.rotation.y = +raise * 0.6;                                // ❌ CAUSES INWARD
+  rUA.rotation.z = baseRotations.rightUpperArm.z + raise * 0.15;
 }
+
 
   // ===============================
   // Lower arm — support forward pose
