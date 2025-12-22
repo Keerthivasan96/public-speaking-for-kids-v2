@@ -64,7 +64,7 @@ let nodProgress = 0;
 // ============================================
 const baseRotations = {
   // Right arm: z negative pushes arm DOWN to side
-  rightUpperArm: { x: 0.1, y: 0, z: -0.25 },
+  rightUpperArm: { x: 0.1, y: 0, z: -0.5 },
   rightLowerArm: { x: 0, y: 0.15, z: 0 },
   rightHand: { x: 0, y: 0, z: 0 },
   
@@ -560,92 +560,104 @@ export function triggerWave() {
 // ============================================
 function updateWaveAnimation(delta) {
   if (!isWaving || !currentVRM?.humanoid) return;
-
+  
   waveProgress += delta * 1000;
   const duration = CONFIG.waveDuration;
   const progress = Math.min(waveProgress / duration, 1);
-
+  
   const get = (name) => currentVRM.humanoid.getNormalizedBoneNode(name);
-
+  
   const rUA = get("rightUpperArm");
   const rLA = get("rightLowerArm");
-  const rH  = get("rightHand");
-
-  // Smooth raise with pop → hold & wave → gentle lower
-  let raise;
-  if (progress < 0.2) {
-    raise = easeOutBack(progress / 0.2);           // Energetic raise with overshoot
+  const rH = get("rightHand");
+  
+  // Phase timing
+  // 0.00 - 0.20: Raise arm (with slight overshoot via easeOutBack)
+  // 0.20 - 0.75: Hold and wave
+  // 0.75 - 1.00: Lower back to idle
+  
+  let raiseAmount;
+  if (progress < 0.20) {
+    // Raise with overshoot
+    raiseAmount = easeOutBack(progress / 0.20);
   } else if (progress < 0.75) {
-    raise = 1.0;                                   // Full height during waving
+    // Hold at top
+    raiseAmount = 1.0;
   } else {
-    raise = 1.0 - easeInOutCubic((progress - 0.75) / 0.25); // Smooth return
+    // Lower smoothly
+    raiseAmount = 1.0 - easeInOutCubic((progress - 0.75) / 0.25);
   }
-
+  
   // ============================================
-  // Right Upper Arm — Reach toward camera
+  // RIGHT UPPER ARM - Raise forward and out
   // ============================================
   if (rUA) {
-    rUA.rotation.x = baseRotations.rightUpperArm.x - raise * 1.1;  // A bit higher reach
-    rUA.rotation.y = baseRotations.rightUpperArm.y;               // Keep neutral twist
-    rUA.rotation.z = baseRotations.rightUpperArm.z + raise * 0.18;
-  // Open slightly from tight base (-0.5 → ~0.6)
+    // x: negative = forward (toward camera)
+    // z: positive = outward from body (for right arm going from -0.5 base)
+    rUA.rotation.x = baseRotations.rightUpperArm.x - raiseAmount * 0.9;   // Forward
+    rUA.rotation.y = baseRotations.rightUpperArm.y - raiseAmount * 0.15;  // Slight twist
+    rUA.rotation.z = baseRotations.rightUpperArm.z + raiseAmount * 1.0;   // Outward (from -0.5 toward +0.5)
   }
-
+  
   // ============================================
-  // Right Lower Arm — Natural elbow bend
+  // RIGHT LOWER ARM - Bend elbow naturally
   // ============================================
   if (rLA) {
-  rLA.rotation.x = -0.9;  // stable bend
-  rLA.rotation.y = 0;     // ❌ no twist
-  rLA.rotation.z = 0;
-}
-
-
+    // Bend elbow to bring hand up
+    rLA.rotation.x = baseRotations.rightLowerArm.x - raiseAmount * 0.3;
+    rLA.rotation.y = baseRotations.rightLowerArm.y + raiseAmount * 0.8;   // Bend inward
+    rLA.rotation.z = baseRotations.rightLowerArm.z;
+  }
+  
   // ============================================
-  // Right Hand — Palm clearly faces camera + friendly wrist wave
-    // ============================================
-  // Right Hand — FINAL FIX: Flat palm facing camera, no upward tilt
+  // RIGHT HAND - Palm faces camera + wave motion
+  // Key insight: y ≈ 1.3 makes palm face camera!
   // ============================================
   if (rH) {
-    rH.rotation.y = 1.35;  // Locked — palm forward the whole time
-
-    // Stronger wrist bend down to force palm flat toward viewer
-    rH.rotation.x = -0.45;  // Key change: -0.55 base
-
-    // Clear, cute wrist wave
-    if (progress > 0.18 && progress < 0.78) {
+    // Palm orientation - THIS IS THE KEY!
+    // y = 1.3 makes palm face forward toward camera
+    rH.rotation.y = raiseAmount * 1.3;
+    
+    // Slight wrist adjustment
+    rH.rotation.x = -raiseAmount * 0.2;
+    
+    // Wave motion (only during hold phase)
+    if (progress > 0.15 && progress < 0.80) {
+      // Side-to-side wave on z axis
       const waveTime = waveProgress * 0.001 * CONFIG.waveSpeed;
-      rH.rotation.z = Math.sin(waveTime) * 0.9;  // Visible wave
+      rH.rotation.z = Math.sin(waveTime) * 0.5;  // Gentle side-to-side
     } else {
       rH.rotation.z = 0;
     }
   }
-
+  
   // ============================================
-  // End of wave — Clean reset to idle pose
+  // End of wave - reset to idle pose
   // ============================================
   if (progress >= 1) {
     isWaving = false;
-    waveProgress = 0;
-
+    
+    // Smoothly return to base rotations
     if (rUA) rUA.rotation.set(
-      baseRotations.rightUpperArm.x,
-      baseRotations.rightUpperArm.y,
+      baseRotations.rightUpperArm.x, 
+      baseRotations.rightUpperArm.y, 
       baseRotations.rightUpperArm.z
     );
     if (rLA) rLA.rotation.set(
-      baseRotations.rightLowerArm.x,
-      baseRotations.rightLowerArm.y,
+      baseRotations.rightLowerArm.x, 
+      baseRotations.rightLowerArm.y, 
       baseRotations.rightLowerArm.z
     );
     if (rH) rH.rotation.set(
-      baseRotations.rightHand.x,
-      baseRotations.rightHand.y,
+      baseRotations.rightHand.x, 
+      baseRotations.rightHand.y, 
       baseRotations.rightHand.z
     );
-    console.log("[3D] 👋 Wave complete");
+    
+    console.log("[3D] ✅ Wave complete");
   }
 }
+
 // ============================================
 // TRIGGER NOD
 // ============================================
