@@ -22,7 +22,7 @@ const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/
 // ============================================
 const CONFIG = {
   baseSilence: isMobile ? 700 : 280,           // Normal sentences
-  shortPhraseSilence: 550,                    // Wait longer for incomplete
+  shortPhraseSilence: 420,                    // Wait longer for incomplete
   completeSilence: 180,                        // Quick send for complete
   
   minSendGap: 900,
@@ -133,37 +133,58 @@ export function startListening(onFinal, options = {}) {
   };
 
   recognition.onresult = (event) => {
-    clearTimeout(silenceTimer);
-    
-    let interim = "";
-    let final = "";
-    
-    for (let i = event.resultIndex; i < event.results.length; i++) {
-      const text = event.results[i][0].transcript;
-      if (event.results[i].isFinal) {
-        final += text + " ";
-      } else {
-        interim += text;
-      }
+  clearTimeout(silenceTimer);
+
+  let interim = "";
+  let final = "";
+
+  // Collect results
+  for (let i = event.resultIndex; i < event.results.length; i++) {
+    const result = event.results[i];
+    const text = result[0].transcript;
+
+    if (result.isFinal) {
+      final += text + " ";
+    } else {
+      interim += text;
     }
-    
-    if (final) {
-      pendingText += final;
-      console.log("🎤 Final:", final.trim());
+  }
+
+  // Append confirmed speech
+  if (final) {
+    pendingText += final;
+    console.log("🎤 Final:", final.trim());
+  }
+
+  const fullText = (pendingText + interim).trim();
+  interimBuffer = interim;
+
+  if (interim && interim.length > 2) {
+    console.log("🎤 ...", interim.substring(0, 50));
+  }
+
+  // ⚡ Replika-style EARLY SEND on confident interim
+  if (
+    interim &&
+    interim.length > 8 &&
+    !/[.!?]$/.test(interim) &&
+    Date.now() - lastSendTime > CONFIG.minSendGap
+  ) {
+    const words = interim.trim().split(/\s+/).length;
+    if (words >= CONFIG.minWordsForNormal) {
+      console.log("⚡ Early interim send:", interim);
+      finalize((pendingText + interim).trim());
+      return;
     }
-    
-    const fullText = (pendingText + interim).trim();
-    interimBuffer = interim;
-    
-    if (interim && interim.length > 2) {
-      console.log("🎤 ...", interim.substring(0, 50));
-    }
-    
-    if (fullText) {
-      const timeout = getTimeout(fullText);
-      silenceTimer = setTimeout(() => finalize(fullText), timeout);
-    }
-  };
+  }
+
+  // Normal silence-based finalize
+  if (fullText) {
+    const timeout = getTimeout(fullText);
+    silenceTimer = setTimeout(() => finalize(fullText), timeout);
+  }
+};
+
 
   recognition.onerror = (e) => {
     console.log("❌ Error:", e.error);

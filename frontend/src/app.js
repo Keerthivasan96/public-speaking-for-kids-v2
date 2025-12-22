@@ -169,38 +169,47 @@ function setStatus(text) {
 // No more constant questions!
 // ============================================
 function buildPrompt(userText) {
-  const context = conversationHistory.slice(-8).map(m => 
+  const context = conversationHistory.slice(-5).map(m =>
     `${m.role === "user" ? "User" : "Luna"}: ${m.content}`
   ).join("\n");
 
   responseCount++;
-  const shouldAskQuestion = responseCount % 3 === 0; // Ask question only 1 in 3 times
+  const shouldAskQuestion = responseCount % 3 === 0;
 
-  return `You are Luna, a chill AI friend. Talk naturally like you're texting a buddy.
+  return `You are Luna — a chill, emotionally present AI friend.
+You text like a real person, not an assistant.
 
-STYLE:
-- Get straight to the point - answer FIRST, chat SECOND
-- Use contractions (I'm, that's, it's, you're)
-- Keep it casual and conversational
-- Remember what they share
+VOICE:
+- Casual, warm, slightly playful
+- Sounds like a human texting, not explaining
+- Uses contractions naturally
 
-CRITICAL RULES:
-- Length: 3 sentences (35-45 words) - SHORTER and more focused
-- DON'T use their name every time (only occasionally)
-- DON'T start with generic praise ("That's great!", "Wow!", "Interesting!")
-- Answer/respond FIRST, then add one natural follow-up
-- ${shouldAskQuestion ? 'End with ONE short question' : 'Just respond naturally - no question'}
+BEHAVIOR (IMPORTANT):
+- React first, explain second (or not at all)
+- No long intros, no filler
+- Prefer statements over questions
+- If asking a question, keep it SHORT and natural
+- Never lecture or summarize
 
-AVOID:
-- "Hey [Name], that's..." ❌
-- "Wow, [topic] is so fascinating..." ❌
-- "That's a great question..." ❌
-- Long intros before the actual answer ❌
+STYLE RULES:
+- 2–3 short sentences (20–40 words total)
+- Start immediately — no greetings
+- No generic praise or validation
+- Continue the conversation, don’t redirect it
 
-${context ? `Recent:\n${context}\n\n` : ""}User: "${userText}"
+AVOID COMPLETELY:
+- “That’s a great question”
+- “I’m glad you shared”
+- “Wow, that’s interesting”
+- Overly enthusiastic or robotic tone
 
-Respond in 3 sentences (35-45 words). ${shouldAskQuestion ? 'One question at end.' : 'No question - just respond.'} Get to the point fast!`;
+${context ? `Recent conversation:\n${context}\n\n` : ""}User: "${userText}"
+
+Respond as Luna.
+${shouldAskQuestion ? 'End with ONE casual question.' : 'Do NOT ask a question.'}
+Sound natural. Get to the point fast.`;
 }
+
 
 // ============================================
 // VOICE
@@ -236,7 +245,7 @@ function speak(text) {
   const utterance = new SpeechSynthesisUtterance(clean);
   utterance.lang = "en-US";
   utterance.volume = 1.0;
-  utterance.rate = isMobile ? 0.92 : 0.95;
+  utterance.rate = isMobile ? 0.92 : 1.02;
   utterance.pitch = 1.1;
   
   const voice = getBestVoice();
@@ -246,6 +255,7 @@ function speak(text) {
     console.log("🔊 Started");
     isSpeaking = true;
     setSpeaking(true);
+    stopListening();
     avatarStartTalking();
     lowerMusic();
   };
@@ -265,7 +275,7 @@ function speak(text) {
         if (isRunning && !isSpeaking) {
           startListeningCycle();
         }
-      }, isMobile ? 350 : 250);
+      }, isMobile ? 350 : 120);
     } else {
       setStatus("Tap mic to talk 💭");
     }
@@ -285,11 +295,8 @@ function speak(text) {
     }
   };
 
-  setTimeout(() => {
-    window.speechSynthesis.speak(utterance);
-  }, 50);
+  window.speechSynthesis.speak(utterance);
 }
-
 function stopSpeaking() {
   window.speechSynthesis.cancel();
   isSpeaking = false;
@@ -334,7 +341,7 @@ async function sendMessage(text) {
   
   isProcessing = true;
   stopSpeaking();
-  stopListening();
+  
   
   conversationHistory.push({ role: "user", content: text });
   saveHistory();
@@ -370,7 +377,7 @@ async function sendMessage(text) {
     console.log(`📝 "${reply.substring(0, 80)}..."`);
 
     // STRICT validation - reject if too short
-    if (!reply || reply.length < 20) {
+    if (!reply || reply.length < 12) {
       throw new Error("Response too short");
     }
 
@@ -551,4 +558,4 @@ if (document.readyState === "loading") {
 window.addEventListener("beforeunload", () => {
   stopSpeaking();
   stopListening();
-});
+}); 
