@@ -601,19 +601,17 @@ function updateWaveAnimation(delta) {
 
   // ============================================
   // Right Hand — Palm clearly faces camera + friendly wrist wave
-  // ============================================
   if (rH) {
-    // FIXED: Constant base rotation so palm faces forward EARLY
-    // 1.35 is the magic number for your model — palm visible and open
-    rH.rotation.y = 1.35 + raise * 0.15;  // Slight extra openness at top
+    // Palm rotation: locked to face directly forward
+    rH.rotation.y = 1.35;  // Constant — no scaling, perfect for your model
 
-    // Wrist pitch: opens palm naturally (prevents downward tilt)
-    rH.rotation.x = -0.25 - raise * 0.25;  // Starts slightly open, opens more
+    // Wrist pitch: stronger negative to flatten palm toward viewer
+    rH.rotation.x = -0.4 - raise * 0.3;  // Starts open, opens more at top
 
-    // Friendly side-to-side wrist wave
+    // Friendly wrist wave
     if (progress > 0.18 && progress < 0.78) {
       const waveTime = waveProgress * 0.001 * CONFIG.waveSpeed;
-      rH.rotation.z = Math.sin(waveTime) * 0.75;  // Clear, cute wave
+      rH.rotation.z = Math.sin(waveTime) * 0.8;  // Slightly bigger for clarity
     } else {
       rH.rotation.z = 0;
     }
