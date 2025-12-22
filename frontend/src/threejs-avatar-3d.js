@@ -644,7 +644,7 @@ function updateWaveAnimation(delta) {
   
   if (rightHand && progress > 0.2 && progress < 0.8) {
     const waveTime = waveProgress * 0.001 * CONFIG.waveSpeed;
-    rightHand.rotation.z = Math.sin(waveTime) * CONFIG.waveAmount;
+    rightHand.rotation.x = -Math.sin(waveTime) * CONFIG.waveAmount;
   }
   
   if (progress >= 1) {
