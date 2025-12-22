@@ -541,12 +541,12 @@ export function triggerWave() {
 
 function updateWaveAnimation(delta) {
   if (!isWaving || !currentVRM?.humanoid) return;
-  
+
   waveProgress += delta * 1000;
   const duration = CONFIG.waveDuration;
   const progress = Math.min(waveProgress / duration, 1);
-  
-  // Smooth raise, wave, lower
+
+  // Smooth raise → wave → lower
   let raise;
   if (progress < 0.2) {
     raise = easeOutBack(progress / 0.2);
@@ -555,40 +555,62 @@ function updateWaveAnimation(delta) {
   } else {
     raise = 1 - easeInCubic((progress - 0.75) / 0.25);
   }
-  
+
   const get = (n) => currentVRM.humanoid.getNormalizedBoneNode(n);
   const rUA = get("rightUpperArm");
   const rLA = get("rightLowerArm");
-  const rH = get("rightHand");
-  
-  // Arm up and FORWARD (toward user!)
+  const rH  = get("rightHand");
+
+  // ===============================
+  // Upper arm — FORCE toward camera
+  // ===============================
   if (rUA) {
-    rUA.rotation.x = baseRotations.rightUpperArm.x - raise * 1.0;   // Forward
-    rUA.rotation.z = baseRotations.rightUpperArm.z + raise * 0.5;   // Out
-    rUA.rotation.y = -raise * 0.3;                                   // Twist toward viewer
+    rUA.rotation.x = baseRotations.rightUpperArm.x - raise * 1.2; // forward
+    rUA.rotation.y = +raise * 0.6;                                // face user (KEY FIX)
+    rUA.rotation.z = baseRotations.rightUpperArm.z + raise * 0.15; // slight open
   }
-  
-  // Elbow bent, forearm up
+
+  // ===============================
+  // Lower arm — support forward pose
+  // ===============================
   if (rLA) {
-    rLA.rotation.x = -raise * 0.4;
-    rLA.rotation.y = baseRotations.rightLowerArm.y - raise * 0.6;
-    rLA.rotation.z = raise * 0.2;
+    rLA.rotation.x = -raise * 0.35;
+    rLA.rotation.y = baseRotations.rightLowerArm.y - raise * 0.5;
+    rLA.rotation.z = 0;
   }
-  
-  // Wave hand side to side
+
+  // ===============================
+  // Hand — palm toward viewer + wave
+  // ===============================
   if (rH && progress > 0.15 && progress < 0.8) {
     const waveT = waveProgress * 0.001 * CONFIG.waveSpeed;
+    rH.rotation.x = -0.6; // palm toward camera
+    rH.rotation.y = 0;
     rH.rotation.z = Math.sin(waveT) * CONFIG.waveAmount;
-    rH.rotation.x = -0.3;  // Palm toward viewer
   }
-  
+
+  // ===============================
+  // Reset pose at end
+  // ===============================
   if (progress >= 1) {
     isWaving = false;
-    if (rUA) rUA.rotation.set(baseRotations.rightUpperArm.x, baseRotations.rightUpperArm.y, baseRotations.rightUpperArm.z);
-    if (rLA) rLA.rotation.set(baseRotations.rightLowerArm.x, baseRotations.rightLowerArm.y, baseRotations.rightLowerArm.z);
+
+    if (rUA) rUA.rotation.set(
+      baseRotations.rightUpperArm.x,
+      baseRotations.rightUpperArm.y,
+      baseRotations.rightUpperArm.z
+    );
+
+    if (rLA) rLA.rotation.set(
+      baseRotations.rightLowerArm.x,
+      baseRotations.rightLowerArm.y,
+      baseRotations.rightLowerArm.z
+    );
+
     if (rH) rH.rotation.set(0, 0, 0);
   }
 }
+
 
 // ============================================
 // TRIGGER NOD - Acknowledgment
