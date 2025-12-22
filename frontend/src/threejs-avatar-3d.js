@@ -585,37 +585,34 @@ function updateWaveAnimation(delta) {
   // Right Upper Arm — Reach toward camera
   // ============================================
   if (rUA) {
-    rUA.rotation.x = baseRotations.rightUpperArm.x - raise * 1.1;  // A bit higher reach
-    rUA.rotation.y = baseRotations.rightUpperArm.y;               // Keep neutral twist
-    rUA.rotation.z = baseRotations.rightUpperArm.z + raise * 0.18;
-  // Open slightly from tight base (-0.5 → ~0.6)
+    // Raise arm to shoulder height (forward + up + out)
+    rUA.rotation.x = baseRotations.rightUpperArm.x - raise * 1.4;  // Forward toward camera
+    rUA.rotation.y = baseRotations.rightUpperArm.y + raise * 0.1;  // Slight twist outward
+    rUA.rotation.z = baseRotations.rightUpperArm.z + raise * 0.5;  // Lift to shoulder level
   }
 
   // ============================================
-  // Right Lower Arm — Natural elbow bend
+  // Right Lower Arm — Natural 90° elbow bend
   // ============================================
   if (rLA) {
-  rLA.rotation.x = -0.9;  // stable bend
-  rLA.rotation.y = 0;     // ❌ no twist
-  rLA.rotation.z = 0;
-}
-
+    // Smooth elbow bend - not too tight
+    rLA.rotation.x = -raise * 1.35;  // Natural 90° bend when raised
+    rLA.rotation.y = raise * 0.2;    // Slight outward twist
+    rLA.rotation.z = 0;
+  }
 
   // ============================================
-  // Right Hand — Palm clearly faces camera + friendly wrist wave
-    // ============================================
-  // Right Hand — FINAL FIX: Flat palm facing camera, no upward tilt
+  // Right Hand — Palm faces camera + friendly wave
   // ============================================
   if (rH) {
-    rH.rotation.y = 1.35;  // Locked — palm forward the whole time
-
-    // Stronger wrist bend down to force palm flat toward viewer
-    rH.rotation.x = -0.45;  // Key change: -0.55 base
-
-    // Clear, cute wrist wave
-    if (progress > 0.18 && progress < 0.78) {
+    // Palm facing camera orientation
+    rH.rotation.y = 1.57 * raise;  // 90° = palm forward
+    rH.rotation.x = -0.3 * raise;  // Slight wrist tilt down
+    
+    // Side-to-side wrist wave during hold phase
+    if (progress > 0.2 && progress < 0.75) {
       const waveTime = waveProgress * 0.001 * CONFIG.waveSpeed;
-      rH.rotation.z = Math.sin(waveTime) * 0.9;  // Visible wave
+      rH.rotation.z = Math.sin(waveTime) * 0.7;  // Friendly wave motion
     } else {
       rH.rotation.z = 0;
     }
