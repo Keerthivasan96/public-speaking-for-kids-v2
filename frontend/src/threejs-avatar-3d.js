@@ -585,7 +585,7 @@ function updateWaveAnimation(delta) {
   // Right Upper Arm — Reach toward camera
   // ============================================
   if (rUA) {
-    rUA.rotation.x = baseRotations.rightUpperArm.x - raise * 1.0;  // Forward toward viewer
+    rUA.rotation.x = baseRotations.rightUpperArm.x - raise * 1.1;  // A bit higher reach
     rUA.rotation.y = baseRotations.rightUpperArm.y;               // Keep neutral twist
     rUA.rotation.z = baseRotations.rightUpperArm.z + raise * 1.1;  // Open slightly from tight base (-0.5 → ~0.6)
   }
