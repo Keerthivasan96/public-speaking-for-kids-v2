@@ -66,7 +66,7 @@ let emotionIntensity = 0;
 // Base rotations (arms naturally at sides, slightly forward)
 const baseRotations = {
   leftUpperArm: { x: 0.15, y: 0, z: 0.8 },
-  rightUpperArm: { x: 0.15, y: 0, z: -0.8 },
+  rightUpperArm: { x: 0.15, y: 0, z: 1.2 },
   leftLowerArm: { x: 0, y: -0.1, z: 0 },
   rightLowerArm: { x: 0, y: 0.1, z: 0 },
   leftHand: { x: 0, y: 0, z: 0 },
