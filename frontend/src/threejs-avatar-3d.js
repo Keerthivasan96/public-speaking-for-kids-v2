@@ -569,7 +569,7 @@ function updateWaveAnimation(delta) {
 // ===============================
 if (rUA) {
   rUA.rotation.x = baseRotations.rightUpperArm.x - raise * 1.2; // forward
-  rUA.rotation.y = +raise * 0.6;                                // ❌ CAUSES INWARD
+  rUA.rotation.y = +raise * 0.6;                               
   rUA.rotation.z = baseRotations.rightUpperArm.z + raise * 0.15;
 }
 
@@ -587,11 +587,12 @@ if (rUA) {
   // Hand — palm toward viewer + wave
   // ===============================
   if (rH && progress > 0.15 && progress < 0.8) {
-    const waveT = waveProgress * 0.001 * CONFIG.waveSpeed;
-    rH.rotation.x = -0.6; // palm toward camera
-    rH.rotation.y = 0;
-    rH.rotation.z = Math.sin(waveT) * CONFIG.waveAmount;
-  }
+  const waveT = waveProgress * 0.001 * CONFIG.waveSpeed;
+
+  rH.rotation.x = -0.4;                 // wrist bend
+  rH.rotation.y = Math.PI;              // 🔥 FLIP PALM TOWARD CAMERA
+  rH.rotation.z = Math.sin(waveT) * CONFIG.waveAmount;
+}
 
   // ===============================
   // Reset pose at end
