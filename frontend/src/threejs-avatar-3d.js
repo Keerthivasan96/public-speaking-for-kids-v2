@@ -565,10 +565,10 @@ function updateWaveAnimation(delta) {
   // Upper arm — FORCE toward camera
   // ===============================
   if (rUA) {
-    rUA.rotation.x = baseRotations.rightUpperArm.x - raise * 1.2; // forward
-    rUA.rotation.y = +raise * 0.6;                                // face user (KEY FIX)
-    rUA.rotation.z = baseRotations.rightUpperArm.z + raise * 0.15; // slight open
-  }
+  rUA.rotation.x = baseRotations.rightUpperArm.x - raise * 1.1; // lift forward
+  rUA.rotation.y = 0;                                           // IMPORTANT: neutral
+  rUA.rotation.z = baseRotations.rightUpperArm.z - raise * 0.6; // NEGATIVE = toward camera
+}
 
   // ===============================
   // Lower arm — support forward pose
