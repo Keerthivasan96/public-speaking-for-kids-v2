@@ -644,6 +644,7 @@ function updateWaveAnimation(delta) {
   
   if (rightHand && progress > 0.2 && progress < 0.8) {
     const waveTime = waveProgress * 0.001 * CONFIG.waveSpeed;
+    // ✅ FIXED: Use X-axis rotation (inward) instead of Z-axis (sideways)
     rightHand.rotation.x = -Math.sin(waveTime) * CONFIG.waveAmount;
   }
   
@@ -660,6 +661,7 @@ function updateWaveAnimation(delta) {
     }
   }
 }
+
 
 // ============================================
 // IDLE ANIMATIONS (MERGED: Old base + New additions)
