@@ -64,7 +64,7 @@ let nodProgress = 0;
 // ============================================
 const baseRotations = {
   // Right arm: z negative pushes arm DOWN to side
-  rightUpperArm: { x: 0.1, y: 0, z: -0.5 },
+  rightUpperArm: { x: 0.1, y: 0, z: -0.25 }
   rightLowerArm: { x: 0, y: 0.15, z: 0 },
   rightHand: { x: 0, y: 0, z: 0 },
   
@@ -580,9 +580,9 @@ function updateWaveAnimation(delta) {
      UPPER ARM – lift forward ONLY
      =============================== */
   if (rUA) {
-    rUA.rotation.x = baseRotations.rightUpperArm.x - raise * 0.9;
+    rUA.rotation.x = baseRotations.rightUpperArm.x - raise * 1.0;
     rUA.rotation.y = 0;
-    rUA.rotation.z = baseRotations.rightUpperArm.z + raise * 0.4; // small open
+    rUA.rotation.z = baseRotations.rightUpperArm.z + raise * 0.15; // small open
   }
 
   /* ===============================
