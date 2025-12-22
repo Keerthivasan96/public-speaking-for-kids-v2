@@ -1,6 +1,7 @@
 // ============================================
-// threejs-avatar-3d.js - REPLIKA ULTIMATE
-// Vanakkam greeting, fixed wave, ultra lively
+// threejs-avatar-3d.js - DEMO READY
+// Super lively Replika-style animations
+// All gestures face TOWARD the user
 // ============================================
 
 import * as THREE from "three";
@@ -32,6 +33,9 @@ let lookTimer = 0;
 let lookTarget = { x: 0, y: 0 };
 let currentLook = { x: 0, y: 0 };
 
+// Body sway
+let swayTime = 0;
+
 // Lip sync
 let currentMouthOpenness = 0;
 let targetMouthOpenness = 0;
@@ -44,33 +48,39 @@ let gestureType = 0;
 // Talking gesture state
 let talkingGestureTimer = 0;
 let currentTalkingGesture = -1;
+let talkingGestureProgress = 0;
 
-// Special animation states
+// Special animations
 let isWaving = false;
 let waveProgress = 0;
-let isVanakkam = false;  // Renamed from isNamaste
-let vanakkamProgress = 0;
 let isNodding = false;
 let nodProgress = 0;
+let isHeadTilting = false;
+let headTiltProgress = 0;
+let headTiltDirection = 1;
 
-// Store base rotations
-let baseRotations = {
-  leftUpperArm: { x: 0.2, y: 0, z: 1.0 },
-  rightUpperArm: { x: 0.2, y: 0, z: -1.0 },
-  leftLowerArm: { x: 0, y: -0.2, z: 0 },
-  rightLowerArm: { x: 0, y: 0.2, z: 0 },
-  leftHand: { x: 0, y: 0, z: 0.1 },
-  rightHand: { x: 0, y: 0, z: -0.1 },
+// Emotion state
+let currentEmotion = "neutral";
+let emotionIntensity = 0;
+
+// Base rotations (arms naturally at sides, slightly forward)
+const baseRotations = {
+  leftUpperArm: { x: 0.15, y: 0, z: 0.8 },
+  rightUpperArm: { x: 0.15, y: 0, z: -0.8 },
+  leftLowerArm: { x: 0, y: -0.1, z: 0 },
+  rightLowerArm: { x: 0, y: 0.1, z: 0 },
+  leftHand: { x: 0, y: 0, z: 0 },
+  rightHand: { x: 0, y: 0, z: 0 },
 };
 
 // ============================================
-// CONFIGURATION
+// CONFIGURATION - LIVELY SETTINGS
 // ============================================
 const CONFIG = {
-  // ===== AVATAR =====
+  // Avatar
   avatarHeight: 1.45,
   
-  // ===== CAMERA =====
+  // Camera
   cameraX: 0,
   cameraY: 1.4,
   cameraZ: 2.5,
@@ -79,75 +89,95 @@ const CONFIG = {
   lookAtZ: 0,
   cameraFOV: 50,
   
-  // ===== AVATAR POSITION =====
+  // Avatar position
   avatarX: 0,
   avatarY: 0,
   avatarZ: 0.5,
   
-  // ===== ROOM =====
+  // Room
   roomScale: 1.1,
   roomX: 0,
   roomY: -0.2,
   roomZ: -2,
   
-  // ===== COLORS =====
+  // Colors
   skyTopColor: 0x9B8AC4,
   skyMidColor: 0xC4B8D8,
   skyBottomColor: 0xE8E0F0,
   floorCenterColor: 0xE2DEE9,
   floorEdgeColor: 0xC5BCD4,
   
-  // ===== BREATHING =====
-  breathingSpeed: 0.5,
-  breathingAmount: 0.004,
-  shoulderBreathAmount: 0.002,
+  // Breathing - subtle but visible
+  breathingSpeed: 0.6,
+  breathingAmount: 0.006,
+  shoulderBreathAmount: 0.003,
   
-  // ===== HEAD/LOOK =====
-  lookAtViewerChance: 0.75,
-  lookAwayInterval: 4000,
-  lookAwayDuration: 1500,
-  lookAmountX: 0.12,
-  lookAmountY: 0.08,
-  lookSmoothing: 0.06,
+  // Body sway - makes it feel alive
+  bodySwaySpeed: 0.25,
+  bodySwayAmount: 0.008,
+  hipSwayAmount: 0.003,
+  
+  // Head - very active, engaged with user
+  lookAtViewerChance: 0.85,      // 85% look at user
+  lookAwayInterval: 3000,
+  lookAwayDuration: 800,
+  lookAmountX: 0.15,
+  lookAmountY: 0.1,
+  lookSmoothing: 0.08,           // Faster response
   headTiltAmount: 0.06,
+  headTiltSpeed: 0.4,
   
-  // ===== ARM SWAY =====
-  armSwayAmount: 0.01,
+  // Random head tilts (curious/interested)
+  headTiltInterval: 6000,
+  headTiltDuration: 1500,
+  headTiltMax: 0.12,
+  
+  // Arm sway (idle)
+  armSwayAmount: 0.012,
   armSwaySpeed: 0.35,
   
-  // ===== IDLE GESTURES =====
-  gestureInterval: 9000,
-  gestureDuration: 1600,
-  gestureAmount: 0.16,
+  // Idle gestures - more frequent
+  gestureInterval: 6000,
+  gestureDuration: 1500,
+  gestureAmount: 0.18,
   
-  // ===== TALKING GESTURES =====
-  talkingGestureInterval: 1800,
-  talkingGestureAmount: 0.24,
-  talkingGestureDuration: 950,
+  // Talking gestures - very expressive
+  talkingGestureInterval: 1500,
+  talkingGestureAmount: 0.28,
+  talkingGestureDuration: 800,
   
-  // ===== WAVE =====
-  waveDuration: 2200,
-  waveAmount: 0.55,
-  waveSpeed: 15,
+  // Wave
+  waveDuration: 1800,
+  waveAmount: 0.6,
+  waveSpeed: 16,
   
-  // ===== VANAKKAM (Namaste) =====
-  vanakkamDuration: 3000,
-  vanakkamBowAmount: 0.25,
-  
-  // ===== NOD =====
-  nodDuration: 600,
+  // Nod
+  nodDuration: 500,
   nodAmount: 0.12,
+  nodCount: 2,
   
-  // ===== BLINK =====
-  blinkInterval: 2800,
-  blinkVariation: 2200,
-  blinkDuration: 110,
+  // Blink - natural frequency
+  blinkInterval: 2500,
+  blinkVariation: 1500,
+  blinkDuration: 100,
   doubleBinkChance: 0.3,
   
-  // ===== LIP SYNC =====
-  lipSyncSmooth: 0.16,
+  // Lip sync
+  lipSyncSmooth: 0.18,
   lipSyncIntensity: 0.85,
+  
+  // Expressions while talking
+  talkingSmileAmount: 0.15,
 };
+
+// ============================================
+// EASING FUNCTIONS
+// ============================================
+function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
+function easeInCubic(t) { return t * t * t; }
+function easeInOutCubic(t) { return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; }
+function easeOutBack(t) { const c1 = 1.70158; const c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); }
+function easeOutElastic(t) { const c4 = (2 * Math.PI) / 3; return t === 0 ? 0 : t === 1 ? 1 : Math.pow(2, -10 * t) * Math.sin((t * 10 - 0.75) * c4) + 1; }
 
 // ============================================
 // INITIALIZE 3D SCENE
@@ -186,7 +216,6 @@ export function init3DScene(containerId = "canvas-container") {
   container.appendChild(renderer.domElement);
 
   scene = new THREE.Scene();
-  
   createFallbackEnvironment();
   
   camera = new THREE.PerspectiveCamera(
@@ -200,12 +229,10 @@ export function init3DScene(containerId = "canvas-container") {
   camera.lookAt(CONFIG.lookAtX, CONFIG.lookAtY, CONFIG.lookAtZ);
   
   setupLights();
-
   window.addEventListener("resize", onResize, { passive: true });
-
   animate();
 
-  console.log("[3D] ✅ Scene initialized");
+  console.log("[3D] ✅ Scene ready!");
   return true;
 }
 
@@ -249,7 +276,6 @@ function createFallbackEnvironment() {
   });
   
   fallbackSky = new THREE.Mesh(skyGeo, skyMat);
-  fallbackSky.name = "fallbackSky";
   fallbackSky.visible = true;
   scene.add(fallbackSky);
 
@@ -276,8 +302,6 @@ function createFallbackEnvironment() {
         float dist = distance(vUv, avatarPos);
         float gradient = smoothstep(0.0, 0.5, dist);
         vec3 color = mix(centerColor, edgeColor, gradient);
-        float vignette = smoothstep(0.7, 1.0, dist) * 0.15;
-        color = mix(color, edgeColor * 0.9, vignette);
         gl_FragColor = vec4(color, 1.0);
       }
     `
@@ -287,59 +311,32 @@ function createFallbackEnvironment() {
   fallbackGround.rotation.x = -Math.PI / 2;
   fallbackGround.position.y = -0.01;
   fallbackGround.receiveShadow = true;
-  fallbackGround.name = "fallbackGround";
   fallbackGround.visible = true;
   scene.add(fallbackGround);
-  
-  console.log("[3D] ✅ Environment created");
 }
 
 // ============================================
 // SETUP LIGHTING
 // ============================================
 function setupLights() {
-  const lightsToRemove = [];
-  scene.traverse((obj) => {
-    if (obj.isLight) lightsToRemove.push(obj);
-  });
-  lightsToRemove.forEach(l => scene.remove(l));
-
   const mainLight = new THREE.DirectionalLight(0xffffff, 0.9);
   mainLight.position.set(3, 6, 4);
   mainLight.castShadow = true;
   mainLight.shadow.mapSize.width = 2048;
   mainLight.shadow.mapSize.height = 2048;
-  mainLight.shadow.camera.near = 0.5;
-  mainLight.shadow.camera.far = 25;
-  mainLight.shadow.camera.left = -8;
-  mainLight.shadow.camera.right = 8;
-  mainLight.shadow.camera.top = 8;
-  mainLight.shadow.camera.bottom = -8;
-  mainLight.shadow.bias = -0.0001;
   scene.add(mainLight);
 
-  const fillLight = new THREE.DirectionalLight(0xFFE4EC, 0.4);
-  fillLight.position.set(-4, 3, 2);
-  scene.add(fillLight);
-
-  const rimLight = new THREE.DirectionalLight(0xE4E4FF, 0.3);
-  rimLight.position.set(0, 4, -4);
-  scene.add(rimLight);
-
-  const ambient = new THREE.AmbientLight(0xffffff, 0.6);
-  scene.add(ambient);
-
-  const hemi = new THREE.HemisphereLight(0xC9B8E8, 0xE8D4E8, 0.5);
-  scene.add(hemi);
-  
-  console.log("[3D] ✅ Lighting setup");
+  scene.add(new THREE.DirectionalLight(0xFFE4EC, 0.4).translateX(-4).translateY(3).translateZ(2));
+  scene.add(new THREE.DirectionalLight(0xE4E4FF, 0.3).translateY(4).translateZ(-4));
+  scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+  scene.add(new THREE.HemisphereLight(0xC9B8E8, 0xE8D4E8, 0.5));
 }
 
 // ============================================
 // LOAD VRM AVATAR
 // ============================================
 export async function loadVRMAvatar(vrmPath) {
-  console.log("[3D] Loading VRM:", vrmPath);
+  console.log("[3D] Loading:", vrmPath);
 
   const loadingEl = document.getElementById("loading-indicator");
   if (loadingEl) loadingEl.classList.add("active");
@@ -361,7 +358,6 @@ export async function loadVRMAvatar(vrmPath) {
         const vrm = gltf.userData.vrm;
         
         if (!vrm) {
-          console.error("[3D] No VRM data");
           if (loadingEl) loadingEl.classList.remove("active");
           reject(new Error("No VRM data"));
           return;
@@ -397,41 +393,27 @@ export async function loadVRMAvatar(vrmPath) {
         currentVRM = vrm;
         avatarReady = true;
 
-        // Reset all timers
-        idleTime = 0;
-        blinkTimer = 0;
-        gestureTimer = 0;
-        lookTimer = 0;
-        talkingGestureTimer = 0;
-        lookTarget = { x: 0, y: 0 };
-        currentLook = { x: 0, y: 0 };
-        isGesturing = false;
-        isWaving = false;
-        isVanakkam = false;
-        isNodding = false;
-        currentTalkingGesture = -1;
-
+        // Reset everything
+        resetAnimationState();
         setRelaxedPose(vrm);
 
         if (loadingEl) loadingEl.classList.remove("active");
 
-        console.log("[3D] ✅ VRM loaded");
+        console.log("[3D] ✅ Avatar ready!");
         
-        // ✨ VANAKKAM GREETING ON LOAD
+        // Friendly wave on load!
         setTimeout(() => {
-          if (avatarReady) triggerVanakkam();
-        }, 350);
+          if (avatarReady) {
+            triggerWave();
+            // Also do a happy expression
+            setExpression("happy", 0.5, 2000);
+          }
+        }, 300);
         
         resolve(vrm);
       },
-      (progress) => {
-        if (progress.total > 0) {
-          const percent = (progress.loaded / progress.total * 100).toFixed(0);
-          console.log(`[3D] Loading: ${percent}%`);
-        }
-      },
+      undefined,
       (error) => {
-        console.error("[3D] Load failed:", error);
         if (loadingEl) loadingEl.classList.remove("active");
         reject(error);
       }
@@ -439,15 +421,28 @@ export async function loadVRMAvatar(vrmPath) {
   });
 }
 
+function resetAnimationState() {
+  idleTime = 0;
+  swayTime = 0;
+  blinkTimer = 0;
+  gestureTimer = 0;
+  lookTimer = 0;
+  talkingGestureTimer = 0;
+  lookTarget = { x: 0, y: 0 };
+  currentLook = { x: 0, y: 0 };
+  isGesturing = false;
+  isWaving = false;
+  isNodding = false;
+  isHeadTilting = false;
+  currentTalkingGesture = -1;
+  currentEmotion = "neutral";
+  emotionIntensity = 0;
+}
+
 // ============================================
 // LOAD ROOM MODEL
 // ============================================
 export async function loadRoomModel(glbPath) {
-  console.log("[3D] Loading room:", glbPath);
-
-  const loadingEl = document.getElementById("loading-indicator");
-  if (loadingEl) loadingEl.classList.add("active");
-
   if (currentRoom) {
     scene.remove(currentRoom);
     currentRoom = null;
@@ -455,52 +450,37 @@ export async function loadRoomModel(glbPath) {
 
   return new Promise((resolve, reject) => {
     const loader = new GLTFLoader();
-
     loader.load(
       glbPath,
       (gltf) => {
         const room = gltf.scene;
-
-        const box = new THREE.Box3().setFromObject(room);
-        const size = box.getSize(new THREE.Vector3());
-        const center = box.getCenter(new THREE.Vector3());
-
-        console.log("[3D] Room size:", size.x.toFixed(2), "x", size.y.toFixed(2), "x", size.z.toFixed(2));
-
         room.scale.setScalar(CONFIG.roomScale);
-
-        box.setFromObject(room);
-        const scaledCenter = box.getCenter(new THREE.Vector3());
-
+        
+        const box = new THREE.Box3().setFromObject(room);
+        const center = box.getCenter(new THREE.Vector3());
+        
         room.position.set(
-          CONFIG.roomX - scaledCenter.x,
+          CONFIG.roomX - center.x,
           CONFIG.roomY - box.min.y,
-          CONFIG.roomZ - scaledCenter.z
+          CONFIG.roomZ - center.z
         );
 
         room.traverse((obj) => {
           if (obj.isMesh) {
             obj.castShadow = true;
             obj.receiveShadow = true;
-            if (obj.material) {
-              obj.material.side = THREE.DoubleSide;
-            }
+            if (obj.material) obj.material.side = THREE.DoubleSide;
           }
         });
 
         scene.add(room);
         currentRoom = room;
         hasRoomLoaded = true;
-
-        if (loadingEl) loadingEl.classList.remove("active");
-
         console.log("[3D] ✅ Room loaded");
         resolve(room);
       },
       undefined,
       (error) => {
-        console.error("[3D] Room failed:", error);
-        if (loadingEl) loadingEl.classList.remove("active");
         useFallbackEnvironment();
         reject(error);
       }
@@ -508,67 +488,29 @@ export async function loadRoomModel(glbPath) {
   });
 }
 
-// ============================================
-// USE FALLBACK ENVIRONMENT
-// ============================================
 export function useFallbackEnvironment() {
-  if (currentRoom) {
-    scene.remove(currentRoom);
-    currentRoom = null;
-  }
-  
+  if (currentRoom) { scene.remove(currentRoom); currentRoom = null; }
   hasRoomLoaded = false;
-  
   if (fallbackSky) fallbackSky.visible = true;
   if (fallbackGround) fallbackGround.visible = true;
-  
-  console.log("[3D] ✅ Using fallback");
 }
 
 // ============================================
-// CAMERA CONTROLS
+// CAMERA & POSITION CONTROLS
 // ============================================
 export function setCameraPosition(x, y, z) {
-  if (camera) {
-    camera.position.set(x, y, z);
-    camera.lookAt(CONFIG.lookAtX, CONFIG.lookAtY, CONFIG.lookAtZ);
-  }
+  if (camera) { camera.position.set(x, y, z); camera.lookAt(CONFIG.lookAtX, CONFIG.lookAtY, CONFIG.lookAtZ); }
 }
-
-export function setCameraLookAt(x, y, z) {
-  if (camera) camera.lookAt(x, y, z);
-}
-
-export function setCameraFOV(fov) {
-  if (camera) {
-    camera.fov = fov;
-    camera.updateProjectionMatrix();
-  }
-}
-
-// ============================================
-// POSITION CONTROLS
-// ============================================
+export function setCameraLookAt(x, y, z) { if (camera) camera.lookAt(x, y, z); }
+export function setCameraFOV(fov) { if (camera) { camera.fov = fov; camera.updateProjectionMatrix(); } }
 export function setAvatarPosition(x, y, z) {
-  if (currentVRM) {
-    const box = new THREE.Box3().setFromObject(currentVRM.scene);
-    currentVRM.scene.position.set(x, y - box.min.y, z);
-  }
+  if (currentVRM) { const box = new THREE.Box3().setFromObject(currentVRM.scene); currentVRM.scene.position.set(x, y - box.min.y, z); }
 }
-
 export function setRoomPosition(x, y, z) {
-  if (currentRoom) {
-    const box = new THREE.Box3().setFromObject(currentRoom);
-    currentRoom.position.set(x, y - box.min.y, z);
-  }
+  if (currentRoom) { const box = new THREE.Box3().setFromObject(currentRoom); currentRoom.position.set(x, y - box.min.y, z); }
 }
-
-export function setRoomScale(scale) {
-  if (currentRoom) {
-    currentRoom.scale.setScalar(scale);
-    const box = new THREE.Box3().setFromObject(currentRoom);
-    currentRoom.position.y = -box.min.y;
-  }
+export function setRoomScale(s) {
+  if (currentRoom) { currentRoom.scale.setScalar(s); const box = new THREE.Box3().setFromObject(currentRoom); currentRoom.position.y = -box.min.y; }
 }
 
 // ============================================
@@ -576,147 +518,25 @@ export function setRoomScale(scale) {
 // ============================================
 function setRelaxedPose(vrm) {
   if (!vrm?.humanoid) return;
-
-  try {
-    const get = (name) => vrm.humanoid.getNormalizedBoneNode(name);
-    
-    const lUA = get("leftUpperArm");
-    const rUA = get("rightUpperArm");
-    const lLA = get("leftLowerArm");
-    const rLA = get("rightLowerArm");
-
-    if (lUA) lUA.rotation.set(baseRotations.leftUpperArm.x, baseRotations.leftUpperArm.y, baseRotations.leftUpperArm.z);
-    if (rUA) rUA.rotation.set(baseRotations.rightUpperArm.x, baseRotations.rightUpperArm.y, baseRotations.rightUpperArm.z);
-    if (lLA) lLA.rotation.set(baseRotations.leftLowerArm.x, baseRotations.leftLowerArm.y, baseRotations.leftLowerArm.z);
-    if (rLA) rLA.rotation.set(baseRotations.rightLowerArm.x, baseRotations.rightLowerArm.y, baseRotations.rightLowerArm.z);
-
-    console.log("[3D] ✅ Relaxed pose");
-  } catch (e) {
-    console.warn("[3D] Pose error:", e);
-  }
+  const get = (n) => vrm.humanoid.getNormalizedBoneNode(n);
+  
+  const lUA = get("leftUpperArm"), rUA = get("rightUpperArm");
+  const lLA = get("leftLowerArm"), rLA = get("rightLowerArm");
+  
+  if (lUA) lUA.rotation.set(baseRotations.leftUpperArm.x, baseRotations.leftUpperArm.y, baseRotations.leftUpperArm.z);
+  if (rUA) rUA.rotation.set(baseRotations.rightUpperArm.x, baseRotations.rightUpperArm.y, baseRotations.rightUpperArm.z);
+  if (lLA) lLA.rotation.set(baseRotations.leftLowerArm.x, baseRotations.leftLowerArm.y, baseRotations.leftLowerArm.z);
+  if (rLA) rLA.rotation.set(baseRotations.rightLowerArm.x, baseRotations.rightLowerArm.y, baseRotations.rightLowerArm.z);
 }
 
 // ============================================
-// 🙏 VANAKKAM GREETING (Enhanced Namaste)
-// ============================================
-export function triggerVanakkam() {
-  if (!avatarReady || isVanakkam || isWaving) return;
-  isVanakkam = true;
-  vanakkamProgress = 0;
-  console.log("[3D] 🙏 Vanakkam!");
-}
-
-function updateVanakkamAnimation(delta) {
-  if (!isVanakkam || !currentVRM?.humanoid) return;
-  
-  vanakkamProgress += delta * 1000;
-  const duration = CONFIG.vanakkamDuration;
-  const progress = Math.min(vanakkamProgress / duration, 1);
-  
-  // Enhanced phases: raise(0-0.25), hold+bow(0.25-0.65), nod(0.65-0.75), return(0.75-1.0)
-  let handAmount, bowAmount, nodAmount = 0;
-  
-  if (progress < 0.25) {
-    // Raise hands smoothly to chest
-    handAmount = easeOutCubic(progress / 0.25);
-    bowAmount = 0;
-  } else if (progress < 0.65) {
-    // Hold hands, deep bow
-    handAmount = 1;
-    const bowProg = (progress - 0.25) / 0.4;
-    bowAmount = Math.sin(bowProg * Math.PI) * CONFIG.vanakkamBowAmount;
-  } else if (progress < 0.75) {
-    // Quick double nod while hands together
-    handAmount = 1;
-    bowAmount = CONFIG.vanakkamBowAmount * 0.3;  // Slight bow maintained
-    const nodProg = (progress - 0.65) / 0.1;
-    nodAmount = Math.sin(nodProg * Math.PI * 4) * 0.08;  // 2 quick nods
-  } else {
-    // Return smoothly to normal
-    handAmount = 1 - easeInCubic((progress - 0.75) / 0.25);
-    bowAmount = 0;
-    nodAmount = 0;
-  }
-  
-  const get = (name) => currentVRM.humanoid.getNormalizedBoneNode(name);
-  
-  const lUA = get("leftUpperArm");
-  const rUA = get("rightUpperArm");
-  const lLA = get("leftLowerArm");
-  const rLA = get("rightLowerArm");
-  const lH = get("leftHand");
-  const rH = get("rightHand");
-  const spine = get("spine");
-  const chest = get("chest");
-  const head = get("head");
-  const hips = get("hips");
-  
-  // Arms forward and together (palms meeting)
-  if (lUA) {
-    lUA.rotation.x = baseRotations.leftUpperArm.x - handAmount * 0.7;  // Forward
-    lUA.rotation.z = baseRotations.leftUpperArm.z - handAmount * 0.6;  // Inward to center
-    lUA.rotation.y = handAmount * 0.15;  // Slight twist inward
-  }
-  if (rUA) {
-    rUA.rotation.x = baseRotations.rightUpperArm.x - handAmount * 0.7;
-    rUA.rotation.z = baseRotations.rightUpperArm.z + handAmount * 0.6;
-    rUA.rotation.y = -handAmount * 0.15;
-  }
-  
-  // Forearms bring hands to chest center
-  if (lLA) {
-    lLA.rotation.y = baseRotations.leftLowerArm.y - handAmount * 1.5;  // Bend elbow
-    lLA.rotation.z = handAmount * 0.25;  // Angle inward
-    lLA.rotation.x = -handAmount * 0.1;
-  }
-  if (rLA) {
-    rLA.rotation.y = baseRotations.rightLowerArm.y + handAmount * 1.5;
-    rLA.rotation.z = -handAmount * 0.25;
-    rLA.rotation.x = -handAmount * 0.1;
-  }
-  
-  // Hands press together (prayer position)
-  if (lH) {
-    lH.rotation.z = -handAmount * 0.4;  // Rotate to flat palm
-    lH.rotation.y = handAmount * 0.2;   // Slight twist
-  }
-  if (rH) {
-    rH.rotation.z = handAmount * 0.4;
-    rH.rotation.y = -handAmount * 0.2;
-  }
-  
-  // Deep respectful bow
-  if (spine) spine.rotation.x = bowAmount * 0.6;
-  if (chest) chest.rotation.x = bowAmount * 0.4;
-  if (head) head.rotation.x = bowAmount * 0.5 + nodAmount;  // Bow + nod
-  if (hips) hips.rotation.x = bowAmount * 0.15;  // Slight hip tilt for natural bow
-  
-  // End animation
-  if (progress >= 1) {
-    isVanakkam = false;
-    // Reset all to base
-    if (lUA) lUA.rotation.set(baseRotations.leftUpperArm.x, baseRotations.leftUpperArm.y, baseRotations.leftUpperArm.z);
-    if (rUA) rUA.rotation.set(baseRotations.rightUpperArm.x, baseRotations.rightUpperArm.y, baseRotations.rightUpperArm.z);
-    if (lLA) lLA.rotation.set(baseRotations.leftLowerArm.x, baseRotations.leftLowerArm.y, baseRotations.leftLowerArm.z);
-    if (rLA) rLA.rotation.set(baseRotations.rightLowerArm.x, baseRotations.rightLowerArm.y, baseRotations.rightLowerArm.z);
-    if (lH) lH.rotation.set(0, 0, baseRotations.leftHand.z);
-    if (rH) rH.rotation.set(0, 0, baseRotations.rightHand.z);
-    if (spine) spine.rotation.x = 0;
-    if (chest) chest.rotation.x = 0;
-    if (hips) hips.rotation.x = 0;
-    
-    console.log("[3D] ✅ Vanakkam complete!");
-  }
-}
-
-// ============================================
-// 👋 WAVE - FIXED TOWARD USER
+// TRIGGER WAVE - Friendly wave TOWARD user
 // ============================================
 export function triggerWave() {
-  if (!avatarReady || isWaving || isVanakkam) return;
+  if (!avatarReady || isWaving) return;
   isWaving = true;
   waveProgress = 0;
-  console.log("[3D] 👋 Waving!");
+  console.log("[3D] 👋 Hi!");
 }
 
 function updateWaveAnimation(delta) {
@@ -726,252 +546,289 @@ function updateWaveAnimation(delta) {
   const duration = CONFIG.waveDuration;
   const progress = Math.min(waveProgress / duration, 1);
   
-  // Phases: raise(0-0.2), wave(0.2-0.85), lower(0.85-1.0)
-  let raiseAmount;
+  // Smooth raise, wave, lower
+  let raise;
   if (progress < 0.2) {
-    raiseAmount = easeOutCubic(progress / 0.2);
-  } else if (progress < 0.85) {
-    raiseAmount = 1;
+    raise = easeOutBack(progress / 0.2);
+  } else if (progress < 0.75) {
+    raise = 1;
   } else {
-    raiseAmount = 1 - easeInCubic((progress - 0.85) / 0.15);
+    raise = 1 - easeInCubic((progress - 0.75) / 0.25);
   }
   
-  const get = (name) => currentVRM.humanoid.getNormalizedBoneNode(name);
-  
+  const get = (n) => currentVRM.humanoid.getNormalizedBoneNode(n);
   const rUA = get("rightUpperArm");
   const rLA = get("rightLowerArm");
   const rH = get("rightHand");
   
-  // ✅ FIXED: Arm moves TOWARD user (positive X = forward)
+  // Arm up and FORWARD (toward user!)
   if (rUA) {
-    rUA.rotation.x = baseRotations.rightUpperArm.x - raiseAmount * 1.0;  // Forward toward camera
-    rUA.rotation.z = baseRotations.rightUpperArm.z + raiseAmount * 0.7;  // Up and out
-    rUA.rotation.y = raiseAmount * 0.25;  // Twist slightly toward viewer
+    rUA.rotation.x = baseRotations.rightUpperArm.x - raise * 1.0;   // Forward
+    rUA.rotation.z = baseRotations.rightUpperArm.z + raise * 0.5;   // Out
+    rUA.rotation.y = -raise * 0.3;                                   // Twist toward viewer
   }
   
+  // Elbow bent, forearm up
   if (rLA) {
-    rLA.rotation.y = baseRotations.rightLowerArm.y - raiseAmount * 0.9;  // Bend elbow
-    rLA.rotation.x = -raiseAmount * 0.4;  // Forearm forward toward camera
+    rLA.rotation.x = -raise * 0.4;
+    rLA.rotation.y = baseRotations.rightLowerArm.y - raise * 0.6;
+    rLA.rotation.z = raise * 0.2;
   }
   
-  // ✅ FIXED: Hand waves side-to-side FACING viewer
-  if (rH && progress > 0.15 && progress < 0.9) {
-    const waveTime = waveProgress * 0.001 * CONFIG.waveSpeed;
-    rH.rotation.y = Math.sin(waveTime) * CONFIG.waveAmount;  // Side-to-side
-    rH.rotation.x = -0.25;  // Palm faces viewer
-    rH.rotation.z = Math.cos(waveTime * 0.5) * 0.1;  // Slight wrist rotation
+  // Wave hand side to side
+  if (rH && progress > 0.15 && progress < 0.8) {
+    const waveT = waveProgress * 0.001 * CONFIG.waveSpeed;
+    rH.rotation.z = Math.sin(waveT) * CONFIG.waveAmount;
+    rH.rotation.x = -0.3;  // Palm toward viewer
   }
   
-  // End
   if (progress >= 1) {
     isWaving = false;
     if (rUA) rUA.rotation.set(baseRotations.rightUpperArm.x, baseRotations.rightUpperArm.y, baseRotations.rightUpperArm.z);
     if (rLA) rLA.rotation.set(baseRotations.rightLowerArm.x, baseRotations.rightLowerArm.y, baseRotations.rightLowerArm.z);
-    if (rH) rH.rotation.set(0, 0, baseRotations.rightHand.z);
+    if (rH) rH.rotation.set(0, 0, 0);
   }
 }
 
 // ============================================
-// 😊 NOD
+// TRIGGER NOD - Acknowledgment
 // ============================================
 export function triggerNod() {
   if (!avatarReady || isNodding) return;
   isNodding = true;
   nodProgress = 0;
-  console.log("[3D] 😊 Nodding!");
 }
 
 function updateNodAnimation(delta) {
   if (!isNodding || !currentVRM?.humanoid) return;
   
   nodProgress += delta * 1000;
-  const progress = Math.min(nodProgress / CONFIG.nodDuration, 1);
+  const duration = CONFIG.nodDuration * CONFIG.nodCount;
+  const progress = nodProgress / duration;
   
-  const nodAmount = Math.sin(progress * Math.PI * 2) * CONFIG.nodAmount;
+  // Multiple nods
+  const nodCycle = Math.sin(progress * Math.PI * CONFIG.nodCount * 2);
+  const envelope = Math.sin(progress * Math.PI);  // Fade in/out
+  const nod = nodCycle * envelope * CONFIG.nodAmount;
   
   const head = currentVRM.humanoid.getNormalizedBoneNode("head");
-  if (head) {
-    head.rotation.x = currentLook.y + nodAmount;
+  if (head && !isHeadTilting) {
+    head.rotation.x = currentLook.y + nod;
   }
   
-  if (progress >= 1) {
-    isNodding = false;
-  }
+  if (progress >= 1) isNodding = false;
 }
 
 // ============================================
-// IDLE ANIMATIONS
+// HEAD TILT - Curious/interested
+// ============================================
+function triggerHeadTilt() {
+  if (isHeadTilting || isNodding) return;
+  isHeadTilting = true;
+  headTiltProgress = 0;
+  headTiltDirection = Math.random() > 0.5 ? 1 : -1;
+}
+
+function updateHeadTilt(delta) {
+  if (!isHeadTilting || !currentVRM?.humanoid) return;
+  
+  headTiltProgress += delta * 1000;
+  const duration = CONFIG.headTiltDuration;
+  const progress = headTiltProgress / duration;
+  
+  const tilt = Math.sin(progress * Math.PI) * CONFIG.headTiltMax * headTiltDirection;
+  
+  const head = currentVRM.humanoid.getNormalizedBoneNode("head");
+  if (head) {
+    head.rotation.z = tilt;
+  }
+  
+  if (progress >= 1) isHeadTilting = false;
+}
+
+// ============================================
+// IDLE ANIMATION - Main update
 // ============================================
 function updateIdleAnimation(delta) {
   if (!currentVRM || !avatarReady) return;
+  
   idleTime += delta;
+  swayTime += delta;
   
   updateBreathing();
+  updateBodySway();
   updateHeadMovement(delta);
+  updateRandomHeadTilt(delta);
   
-  // Skip arm animations during special animations
-  if (!isWaving && !isVanakkam) {
+  if (!isWaving) {
     if (isTalking) {
       updateTalkingGestures(delta);
     } else {
-      updateArmMovement();
-      updateGestures(delta);
+      updateArmSway();
+      updateIdleGestures(delta);
     }
   }
 }
 
 // ============================================
-// BREATHING
+// BREATHING - Visible chest movement
 // ============================================
 function updateBreathing() {
   if (!currentVRM?.humanoid) return;
-
-  const breathCycle = Math.sin(idleTime * CONFIG.breathingSpeed * Math.PI * 2);
-  const breathOffset = breathCycle * CONFIG.breathingAmount;
   
-  const get = (name) => currentVRM.humanoid.getNormalizedBoneNode(name);
+  const get = (n) => currentVRM.humanoid.getNormalizedBoneNode(n);
+  
+  const breathCycle = Math.sin(idleTime * CONFIG.breathingSpeed * Math.PI * 2);
+  const breath = breathCycle * CONFIG.breathingAmount;
   
   const chest = get("chest");
   const upperChest = get("upperChest");
   const spine = get("spine");
   
-  // Only apply if not in Vanakkam
-  if (!isVanakkam) {
-    if (upperChest) upperChest.rotation.x = breathOffset * 1.5;
-    if (chest) chest.rotation.x = breathOffset;
-    if (spine) spine.rotation.x = breathOffset * 0.3;
-  }
+  if (upperChest) upperChest.rotation.x = breath * 1.8;
+  if (chest) chest.rotation.x = breath * 1.2;
+  if (spine) spine.rotation.x = breath * 0.4;
   
-  const leftShoulder = get("leftShoulder");
-  const rightShoulder = get("rightShoulder");
-  
-  if (leftShoulder) leftShoulder.position.y = breathCycle * CONFIG.shoulderBreathAmount;
-  if (rightShoulder) rightShoulder.position.y = breathCycle * CONFIG.shoulderBreathAmount;
+  // Shoulders rise with breath
+  const lS = get("leftShoulder"), rS = get("rightShoulder");
+  if (lS) lS.position.y = breathCycle * CONFIG.shoulderBreathAmount;
+  if (rS) rS.position.y = breathCycle * CONFIG.shoulderBreathAmount;
 }
 
 // ============================================
-// HEAD MOVEMENT
+// BODY SWAY - Subtle weight shift
+// ============================================
+function updateBodySway() {
+  if (!currentVRM?.humanoid) return;
+  
+  const get = (n) => currentVRM.humanoid.getNormalizedBoneNode(n);
+  
+  const sway = Math.sin(swayTime * CONFIG.bodySwaySpeed * Math.PI * 2);
+  const sway2 = Math.sin(swayTime * CONFIG.bodySwaySpeed * 0.7 * Math.PI * 2);
+  
+  const hips = get("hips");
+  const spine = get("spine");
+  
+  if (hips) {
+    hips.rotation.y = sway * CONFIG.hipSwayAmount;
+    hips.position.x = sway * 0.003;
+  }
+  
+  if (spine) {
+    spine.rotation.z = sway2 * CONFIG.bodySwayAmount;
+  }
+}
+
+// ============================================
+// HEAD MOVEMENT - Active eye contact
 // ============================================
 function updateHeadMovement(delta) {
-  if (!currentVRM?.humanoid || isVanakkam) return;
-
-  const head = currentVRM.humanoid.getNormalizedBoneNode("head");
-  const neck = currentVRM.humanoid.getNormalizedBoneNode("neck");
+  if (!currentVRM?.humanoid) return;
+  
+  const get = (n) => currentVRM.humanoid.getNormalizedBoneNode(n);
+  const head = get("head");
+  const neck = get("neck");
   
   if (!head) return;
 
   lookTimer += delta * 1000;
 
-  if (lookTimer > CONFIG.lookAwayInterval + Math.random() * 2000) {
+  // Decide where to look
+  if (lookTimer > CONFIG.lookAwayInterval + Math.random() * 1000) {
     if (Math.random() < CONFIG.lookAtViewerChance) {
-      lookTarget.x = (Math.random() - 0.5) * 0.04;
-      lookTarget.y = (Math.random() - 0.5) * 0.03;
+      // Look at viewer with micro-variations
+      lookTarget.x = (Math.random() - 0.5) * 0.06;
+      lookTarget.y = (Math.random() - 0.5) * 0.04;
     } else {
+      // Brief glance away
       lookTarget.x = (Math.random() - 0.5) * 2 * CONFIG.lookAmountX;
       lookTarget.y = (Math.random() - 0.5) * 2 * CONFIG.lookAmountY;
     }
     lookTimer = 0;
   }
 
-  if (lookTimer > CONFIG.lookAwayDuration && Math.abs(lookTarget.x) > 0.05) {
-    lookTarget.x *= 0.95;
-    lookTarget.y *= 0.95;
+  // Return to viewer after looking away
+  if (lookTimer > CONFIG.lookAwayDuration && (Math.abs(lookTarget.x) > 0.08 || Math.abs(lookTarget.y) > 0.06)) {
+    lookTarget.x *= 0.92;
+    lookTarget.y *= 0.92;
   }
 
+  // Smooth interpolation
   currentLook.x += (lookTarget.x - currentLook.x) * CONFIG.lookSmoothing;
   currentLook.y += (lookTarget.y - currentLook.y) * CONFIG.lookSmoothing;
 
+  // Apply to head (unless doing special animation)
   if (!isNodding) {
     head.rotation.y = currentLook.x;
     head.rotation.x = currentLook.y;
-    head.rotation.z = Math.sin(idleTime * 0.3) * CONFIG.headTiltAmount;
+    
+    // Subtle continuous tilt
+    if (!isHeadTilting) {
+      head.rotation.z = Math.sin(idleTime * CONFIG.headTiltSpeed) * CONFIG.headTiltAmount;
+    }
   }
 
+  // Neck follows
   if (neck) {
-    neck.rotation.y = currentLook.x * 0.3;
-    neck.rotation.x = currentLook.y * 0.25;
+    neck.rotation.y = currentLook.x * 0.35;
+    neck.rotation.x = currentLook.y * 0.3;
   }
 }
 
 // ============================================
-// ARM MOVEMENT
+// RANDOM HEAD TILT
 // ============================================
-function updateArmMovement() {
-  if (!currentVRM?.humanoid || isGesturing) return;
-
-  const get = (name) => currentVRM.humanoid.getNormalizedBoneNode(name);
-  const lUA = get("leftUpperArm");
-  const rUA = get("rightUpperArm");
-
-  const armSway = Math.sin(idleTime * CONFIG.armSwaySpeed) * CONFIG.armSwayAmount;
-  
-  if (lUA) lUA.rotation.z = baseRotations.leftUpperArm.z + armSway;
-  if (rUA) rUA.rotation.z = baseRotations.rightUpperArm.z - armSway;
+function updateRandomHeadTilt(delta) {
+  // Random curious tilts
+  if (!isHeadTilting && !isNodding && Math.random() < delta * 0.15) {
+    triggerHeadTilt();
+  }
+  updateHeadTilt(delta);
 }
 
 // ============================================
-// IDLE GESTURES
+// ARM SWAY - Natural idle movement
 // ============================================
-function updateGestures(delta) {
+function updateArmSway() {
+  if (!currentVRM?.humanoid || isGesturing) return;
+  
+  const get = (n) => currentVRM.humanoid.getNormalizedBoneNode(n);
+  const lUA = get("leftUpperArm"), rUA = get("rightUpperArm");
+  
+  const sway = Math.sin(idleTime * CONFIG.armSwaySpeed) * CONFIG.armSwayAmount;
+  const sway2 = Math.sin(idleTime * CONFIG.armSwaySpeed * 1.3 + 1) * CONFIG.armSwayAmount * 0.7;
+  
+  if (lUA) {
+    lUA.rotation.z = baseRotations.leftUpperArm.z + sway;
+    lUA.rotation.x = baseRotations.leftUpperArm.x + sway2 * 0.3;
+  }
+  if (rUA) {
+    rUA.rotation.z = baseRotations.rightUpperArm.z - sway;
+    rUA.rotation.x = baseRotations.rightUpperArm.x - sway2 * 0.3;
+  }
+}
+
+// ============================================
+// IDLE GESTURES - Varied movements
+// ============================================
+function updateIdleGestures(delta) {
   if (!currentVRM?.humanoid) return;
 
   gestureTimer += delta * 1000;
 
-  if (!isGesturing && gestureTimer > CONFIG.gestureInterval + Math.random() * 5000) {
+  if (!isGesturing && gestureTimer > CONFIG.gestureInterval + Math.random() * 3000) {
     isGesturing = true;
     gestureProgress = 0;
     gestureTimer = 0;
-    gestureType = Math.floor(Math.random() * 5);  // 5 types now
+    gestureType = Math.floor(Math.random() * 6);
   }
 
   if (isGesturing) {
     gestureProgress += delta * 1000;
     const progress = gestureProgress / CONFIG.gestureDuration;
-    const eased = Math.sin(progress * Math.PI);
+    const ease = Math.sin(progress * Math.PI);  // Smooth in-out
     
-    const get = (name) => currentVRM.humanoid.getNormalizedBoneNode(name);
-    const rUA = get("rightUpperArm");
-    const rLA = get("rightLowerArm");
-    const lUA = get("leftUpperArm");
-    const lLA = get("leftLowerArm");
-    
-    const amt = CONFIG.gestureAmount * eased;
-    
-    switch (gestureType) {
-      case 0: // Right arm lift
-        if (rUA) {
-          rUA.rotation.z = baseRotations.rightUpperArm.z + amt;
-          rUA.rotation.x = baseRotations.rightUpperArm.x - amt * 0.3;
-        }
-        break;
-      case 1: // Left arm lift
-        if (lUA) {
-          lUA.rotation.z = baseRotations.leftUpperArm.z - amt;
-          lUA.rotation.x = baseRotations.leftUpperArm.x - amt * 0.3;
-        }
-        break;
-      case 2: // Both arms
-        if (rUA) rUA.rotation.z = baseRotations.rightUpperArm.z + amt * 0.7;
-        if (lUA) lUA.rotation.z = baseRotations.leftUpperArm.z - amt * 0.7;
-        break;
-      case 3: // Thinking (hand toward chin)
-        if (rUA) {
-          rUA.rotation.x = baseRotations.rightUpperArm.x - amt * 0.5;
-          rUA.rotation.z = baseRotations.rightUpperArm.z + amt * 0.3;
-        }
-        if (rLA) rLA.rotation.y = baseRotations.rightLowerArm.y - amt * 0.8;
-        break;
-      case 4: // Stretch (both arms up slightly)
-        if (rUA) {
-          rUA.rotation.x = baseRotations.rightUpperArm.x - amt * 0.2;
-          rUA.rotation.z = baseRotations.rightUpperArm.z + amt * 0.4;
-        }
-        if (lUA) {
-          lUA.rotation.x = baseRotations.leftUpperArm.x - amt * 0.2;
-          lUA.rotation.z = baseRotations.leftUpperArm.z - amt * 0.4;
-        }
-        break;
-    }
+    applyIdleGesture(ease);
 
     if (gestureProgress >= CONFIG.gestureDuration) {
       isGesturing = false;
@@ -979,8 +836,69 @@ function updateGestures(delta) {
   }
 }
 
+function applyIdleGesture(intensity) {
+  const get = (n) => currentVRM.humanoid.getNormalizedBoneNode(n);
+  const amt = CONFIG.gestureAmount * intensity;
+  
+  const rUA = get("rightUpperArm"), rLA = get("rightLowerArm");
+  const lUA = get("leftUpperArm"), lLA = get("leftLowerArm");
+  const rH = get("rightHand");
+  
+  switch (gestureType) {
+    case 0: // Right hand forward (toward user)
+      if (rUA) {
+        rUA.rotation.x = baseRotations.rightUpperArm.x - amt * 0.4;
+        rUA.rotation.z = baseRotations.rightUpperArm.z + amt * 0.5;
+      }
+      if (rLA) rLA.rotation.y = baseRotations.rightLowerArm.y - amt * 0.4;
+      break;
+      
+    case 1: // Left hand forward
+      if (lUA) {
+        lUA.rotation.x = baseRotations.leftUpperArm.x - amt * 0.4;
+        lUA.rotation.z = baseRotations.leftUpperArm.z - amt * 0.5;
+      }
+      if (lLA) lLA.rotation.y = baseRotations.leftLowerArm.y + amt * 0.4;
+      break;
+      
+    case 2: // Both arms slight open
+      if (rUA) rUA.rotation.z = baseRotations.rightUpperArm.z + amt * 0.4;
+      if (lUA) lUA.rotation.z = baseRotations.leftUpperArm.z - amt * 0.4;
+      break;
+      
+    case 3: // Touch chin (thinking)
+      if (rUA) {
+        rUA.rotation.x = baseRotations.rightUpperArm.x - amt * 0.6;
+        rUA.rotation.z = baseRotations.rightUpperArm.z + amt * 0.3;
+      }
+      if (rLA) rLA.rotation.y = baseRotations.rightLowerArm.y - amt * 0.9;
+      break;
+      
+    case 4: // Cross arms slightly
+      if (rUA) {
+        rUA.rotation.x = baseRotations.rightUpperArm.x - amt * 0.3;
+        rUA.rotation.z = baseRotations.rightUpperArm.z + amt * 0.2;
+      }
+      if (lUA) {
+        lUA.rotation.x = baseRotations.leftUpperArm.x - amt * 0.3;
+        lUA.rotation.z = baseRotations.leftUpperArm.z - amt * 0.2;
+      }
+      break;
+      
+    case 5: // Hand on hip
+      if (rUA) {
+        rUA.rotation.z = baseRotations.rightUpperArm.z + amt * 0.3;
+      }
+      if (rLA) {
+        rLA.rotation.y = baseRotations.rightLowerArm.y - amt * 0.6;
+        rLA.rotation.z = amt * 0.2;
+      }
+      break;
+  }
+}
+
 // ============================================
-// TALKING GESTURES (Enhanced - 8 types now!)
+// TALKING GESTURES - Very expressive!
 // ============================================
 function updateTalkingGestures(delta) {
   if (!currentVRM?.humanoid || !isTalking) return;
@@ -988,21 +906,21 @@ function updateTalkingGestures(delta) {
   talkingGestureTimer += delta * 1000;
   
   if (currentTalkingGesture === -1 || talkingGestureTimer > CONFIG.talkingGestureInterval) {
-    currentTalkingGesture = Math.floor(Math.random() * 8);  // 8 types!
+    currentTalkingGesture = Math.floor(Math.random() * 10);  // 10 different gestures!
     talkingGestureTimer = 0;
-    gestureProgress = 0;
+    talkingGestureProgress = 0;
   }
   
-  gestureProgress += delta * 1000;
+  talkingGestureProgress += delta * 1000;
   const duration = CONFIG.talkingGestureDuration;
   
   let intensity;
-  if (gestureProgress < duration * 0.2) {
-    intensity = easeOutCubic(gestureProgress / (duration * 0.2));
-  } else if (gestureProgress < duration * 0.6) {
+  if (talkingGestureProgress < duration * 0.15) {
+    intensity = easeOutCubic(talkingGestureProgress / (duration * 0.15));
+  } else if (talkingGestureProgress < duration * 0.5) {
     intensity = 1;
-  } else if (gestureProgress < duration) {
-    intensity = 1 - easeInCubic((gestureProgress - duration * 0.6) / (duration * 0.4));
+  } else if (talkingGestureProgress < duration) {
+    intensity = 1 - easeInCubic((talkingGestureProgress - duration * 0.5) / (duration * 0.5));
   } else {
     intensity = 0;
   }
@@ -1011,37 +929,38 @@ function updateTalkingGestures(delta) {
 }
 
 function applyTalkingGesture(intensity) {
-  if (!currentVRM?.humanoid) return;
-  
-  const get = (name) => currentVRM.humanoid.getNormalizedBoneNode(name);
-  
-  const rUA = get("rightUpperArm");
-  const rLA = get("rightLowerArm");
-  const rH = get("rightHand");
-  const lUA = get("leftUpperArm");
-  const lLA = get("leftLowerArm");
-  const lH = get("leftHand");
-  
+  const get = (n) => currentVRM.humanoid.getNormalizedBoneNode(n);
   const amt = CONFIG.talkingGestureAmount * intensity;
-  const v = Math.sin(idleTime * 4.5) * 0.035;  // Dynamic variation
+  const v = Math.sin(idleTime * 5) * 0.04;  // Micro-movement
+  
+  const rUA = get("rightUpperArm"), rLA = get("rightLowerArm"), rH = get("rightHand");
+  const lUA = get("leftUpperArm"), lLA = get("leftLowerArm"), lH = get("leftHand");
+  const lS = get("leftShoulder"), rS = get("rightShoulder");
   
   switch (currentTalkingGesture) {
-    case 0: // Right emphasis - forward toward viewer
+    case 0: // Right hand forward - explaining (TOWARD USER)
       if (rUA) {
         rUA.rotation.x = baseRotations.rightUpperArm.x - amt * 0.6;
-        rUA.rotation.z = baseRotations.rightUpperArm.z + amt * 0.7;
+        rUA.rotation.z = baseRotations.rightUpperArm.z + amt * 0.5;
+        rUA.rotation.y = -amt * 0.15;
       }
-      if (rLA) rLA.rotation.y = baseRotations.rightLowerArm.y - amt * 0.5;
+      if (rLA) {
+        rLA.rotation.y = baseRotations.rightLowerArm.y - amt * 0.5;
+        rLA.rotation.x = -amt * 0.15;
+      }
       if (rH) rH.rotation.x = -amt * 0.25 + v;
       break;
       
-    case 1: // Left emphasis
+    case 1: // Left hand forward
       if (lUA) {
         lUA.rotation.x = baseRotations.leftUpperArm.x - amt * 0.6;
-        lUA.rotation.z = baseRotations.leftUpperArm.z - amt * 0.7;
+        lUA.rotation.z = baseRotations.leftUpperArm.z - amt * 0.5;
+        lUA.rotation.y = amt * 0.15;
       }
-      if (lLA) lLA.rotation.y = baseRotations.leftLowerArm.y + amt * 0.5;
-      if (lH) lH.rotation.x = -amt * 0.25 + v;
+      if (lLA) {
+        lLA.rotation.y = baseRotations.leftLowerArm.y + amt * 0.5;
+        lLA.rotation.x = -amt * 0.15;
+      }
       break;
       
     case 2: // Both hands open - welcoming
@@ -1053,38 +972,40 @@ function applyTalkingGesture(intensity) {
         lUA.rotation.x = baseRotations.leftUpperArm.x - amt * 0.4;
         lUA.rotation.z = baseRotations.leftUpperArm.z - amt * 0.6;
       }
-      if (rLA) rLA.rotation.y = baseRotations.rightLowerArm.y - amt * 0.3;
-      if (lLA) lLA.rotation.y = baseRotations.leftLowerArm.y + amt * 0.3;
+      if (rLA) rLA.rotation.y = baseRotations.rightLowerArm.y - amt * 0.35;
+      if (lLA) lLA.rotation.y = baseRotations.leftLowerArm.y + amt * 0.35;
       break;
       
-    case 3: // Point forward (emphatic)
+    case 3: // Point forward (toward viewer!)
       if (rUA) {
         rUA.rotation.x = baseRotations.rightUpperArm.x - amt * 0.8;
-        rUA.rotation.z = baseRotations.rightUpperArm.z + amt * 0.3;
+        rUA.rotation.z = baseRotations.rightUpperArm.z + amt * 0.25;
+        rUA.rotation.y = -amt * 0.2;
       }
       if (rLA) {
-        rLA.rotation.y = baseRotations.rightLowerArm.y - amt * 0.6;
+        rLA.rotation.y = baseRotations.rightLowerArm.y - amt * 0.5;
         rLA.rotation.x = -amt * 0.25;
       }
       break;
       
-    case 4: // Hands together (thoughtful explaining)
+    case 4: // Hands together - thoughtful
       if (rUA) {
-        rUA.rotation.x = baseRotations.rightUpperArm.x - amt * 0.45;
-        rUA.rotation.z = baseRotations.rightUpperArm.z + amt * 0.35;
+        rUA.rotation.x = baseRotations.rightUpperArm.x - amt * 0.5;
+        rUA.rotation.z = baseRotations.rightUpperArm.z + amt * 0.3;
       }
       if (lUA) {
-        lUA.rotation.x = baseRotations.leftUpperArm.x - amt * 0.45;
-        lUA.rotation.z = baseRotations.leftUpperArm.z - amt * 0.35;
+        lUA.rotation.x = baseRotations.leftUpperArm.x - amt * 0.5;
+        lUA.rotation.z = baseRotations.leftUpperArm.z - amt * 0.3;
       }
-      if (rLA) rLA.rotation.y = baseRotations.rightLowerArm.y - amt * 0.65;
-      if (lLA) lLA.rotation.y = baseRotations.leftLowerArm.y + amt * 0.65;
+      if (rLA) rLA.rotation.y = baseRotations.rightLowerArm.y - amt * 0.7;
+      if (lLA) lLA.rotation.y = baseRotations.leftLowerArm.y + amt * 0.7;
       break;
       
-    case 5: // Reach toward viewer (engaging)
+    case 5: // Reach toward viewer
       if (rUA) {
         rUA.rotation.x = baseRotations.rightUpperArm.x - amt * 0.7;
-        rUA.rotation.z = baseRotations.rightUpperArm.z + amt * 0.25;
+        rUA.rotation.z = baseRotations.rightUpperArm.z + amt * 0.2;
+        rUA.rotation.y = -amt * 0.2;
       }
       if (rLA) {
         rLA.rotation.x = -amt * 0.3;
@@ -1093,44 +1014,65 @@ function applyTalkingGesture(intensity) {
       if (rH) rH.rotation.x = -amt * 0.35;
       break;
       
-    case 6: // Shrug (both shoulders)
-      const lS = get("leftShoulder");
-      const rS = get("rightShoulder");
-      if (lS) lS.position.y = amt * 0.018;
-      if (rS) rS.position.y = amt * 0.018;
-      if (rUA) rUA.rotation.z = baseRotations.rightUpperArm.z + amt * 0.18;
-      if (lUA) lUA.rotation.z = baseRotations.leftUpperArm.z - amt * 0.18;
+    case 6: // Shrug
+      if (lS) lS.position.y = amt * 0.02;
+      if (rS) rS.position.y = amt * 0.02;
+      if (rUA) rUA.rotation.z = baseRotations.rightUpperArm.z + amt * 0.2;
+      if (lUA) lUA.rotation.z = baseRotations.leftUpperArm.z - amt * 0.2;
       break;
       
-    case 7: // Counting/listing (alternating hands)
-      const altTime = Math.sin(idleTime * 6);
-      if (altTime > 0) {
-        if (rUA) {
-          rUA.rotation.x = baseRotations.rightUpperArm.x - amt * 0.5;
-          rUA.rotation.z = baseRotations.rightUpperArm.z + amt * 0.4;
-        }
-      } else {
-        if (lUA) {
-          lUA.rotation.x = baseRotations.leftUpperArm.x - amt * 0.5;
-          lUA.rotation.z = baseRotations.leftUpperArm.z - amt * 0.4;
-        }
+    case 7: // Counting/listing (finger up)
+      if (rUA) {
+        rUA.rotation.x = baseRotations.rightUpperArm.x - amt * 0.55;
+        rUA.rotation.z = baseRotations.rightUpperArm.z + amt * 0.4;
+      }
+      if (rLA) {
+        rLA.rotation.y = baseRotations.rightLowerArm.y - amt * 0.55;
+      }
+      if (rH) {
+        rH.rotation.x = -amt * 0.15;
+        rH.rotation.z = v * 2;
+      }
+      break;
+      
+    case 8: // Emphatic both hands forward
+      if (rUA) {
+        rUA.rotation.x = baseRotations.rightUpperArm.x - amt * 0.55;
+        rUA.rotation.z = baseRotations.rightUpperArm.z + amt * 0.35;
+      }
+      if (lUA) {
+        lUA.rotation.x = baseRotations.leftUpperArm.x - amt * 0.55;
+        lUA.rotation.z = baseRotations.leftUpperArm.z - amt * 0.35;
+      }
+      if (rLA) {
+        rLA.rotation.y = baseRotations.rightLowerArm.y - amt * 0.4;
+        rLA.rotation.x = -amt * 0.15;
+      }
+      if (lLA) {
+        lLA.rotation.y = baseRotations.leftLowerArm.y + amt * 0.4;
+        lLA.rotation.x = -amt * 0.15;
+      }
+      break;
+      
+    case 9: // Heartfelt (hand to chest)
+      if (rUA) {
+        rUA.rotation.x = baseRotations.rightUpperArm.x - amt * 0.4;
+        rUA.rotation.z = baseRotations.rightUpperArm.z + amt * 0.45;
+      }
+      if (rLA) {
+        rLA.rotation.y = baseRotations.rightLowerArm.y - amt * 0.85;
       }
       break;
   }
 }
 
-// Easing functions
-function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
-function easeInCubic(t) { return t * t * t; }
-
 // ============================================
-// BLINKING
+// BLINKING - Natural
 // ============================================
 function updateBlinking(delta) {
   if (!currentVRM?.expressionManager) return;
 
   blinkTimer += delta * 1000;
-
   const interval = CONFIG.blinkInterval + Math.random() * CONFIG.blinkVariation;
 
   if (blinkTimer >= interval) {
@@ -1143,6 +1085,7 @@ function updateBlinking(delta) {
         if (currentVRM?.expressionManager?.expressionMap["blink"]) {
           currentVRM.expressionManager.setValue("blink", 0.0);
           
+          // Double blink sometimes
           if (Math.random() < CONFIG.doubleBinkChance) {
             setTimeout(() => {
               if (currentVRM?.expressionManager?.expressionMap["blink"]) {
@@ -1153,7 +1096,7 @@ function updateBlinking(delta) {
                   }
                 }, CONFIG.blinkDuration);
               }
-            }, 140);
+            }, 120);
           }
         }
       }, CONFIG.blinkDuration);
@@ -1164,7 +1107,7 @@ function updateBlinking(delta) {
 }
 
 // ============================================
-// LIP SYNC
+// LIP SYNC - Smooth mouth movement
 // ============================================
 function updateLipSync() {
   if (!currentVRM?.expressionManager) return;
@@ -1175,8 +1118,13 @@ function updateLipSync() {
   const intensity = CONFIG.lipSyncIntensity;
   
   if (expr.expressionMap["aa"]) expr.setValue("aa", currentMouthOpenness * intensity);
-  if (expr.expressionMap["oh"]) expr.setValue("oh", currentMouthOpenness * 0.32 * Math.abs(Math.sin(idleTime * 10.5)));
-  if (expr.expressionMap["ih"]) expr.setValue("ih", currentMouthOpenness * 0.22 * Math.abs(Math.cos(idleTime * 12.5)));
+  if (expr.expressionMap["oh"]) expr.setValue("oh", currentMouthOpenness * 0.35 * Math.abs(Math.sin(idleTime * 11)));
+  if (expr.expressionMap["ih"]) expr.setValue("ih", currentMouthOpenness * 0.25 * Math.abs(Math.cos(idleTime * 13)));
+  
+  // Subtle smile while talking
+  if (expr.expressionMap["happy"]) {
+    expr.setValue("happy", CONFIG.talkingSmileAmount * currentMouthOpenness);
+  }
 }
 
 // ============================================
@@ -1197,28 +1145,28 @@ export function avatarStopTalking() {
   
   if (currentVRM?.expressionManager) {
     const expr = currentVRM.expressionManager;
-    ["aa", "oh", "ih", "ou", "ee", "a"].forEach(name => {
+    ["aa", "oh", "ih", "ou", "ee", "happy"].forEach(name => {
       if (expr.expressionMap[name]) expr.setValue(name, 0);
     });
   }
   
-  console.log("[3D] 🤐 Stopped");
+  // Nod at end of speaking
+  setTimeout(() => triggerNod(), 200);
+  
+  console.log("[3D] 🤐 Done");
 }
 
 function animateTalking() {
-  if (!isTalking) {
-    targetMouthOpenness = 0;
-    return;
-  }
+  if (!isTalking) { targetMouthOpenness = 0; return; }
 
   const time = Date.now() * 0.001;
   const variation = 
-    Math.sin(time * 8.2) * 0.21 + 
-    Math.sin(time * 13.7) * 0.16 +
-    Math.sin(time * 21.3) * 0.11 +
+    Math.sin(time * 9) * 0.22 + 
+    Math.sin(time * 14) * 0.16 +
+    Math.sin(time * 23) * 0.1 +
     Math.random() * 0.12;
   
-  targetMouthOpenness = Math.max(0.12, Math.min(0.88, 0.38 + variation));
+  targetMouthOpenness = Math.max(0.1, Math.min(0.9, 0.38 + variation));
   requestAnimationFrame(animateTalking);
 }
 
@@ -1243,7 +1191,7 @@ export function setExpression(name, value = 1.0, duration = 0) {
 }
 
 // ============================================
-// ANIMATION LOOP
+// MAIN ANIMATION LOOP
 // ============================================
 function animate() {
   rafId = requestAnimationFrame(animate);
@@ -1254,12 +1202,9 @@ function animate() {
     updateIdleAnimation(delta);
     updateBlinking(delta);
     updateWaveAnimation(delta);
-    updateVanakkamAnimation(delta);  // Vanakkam!
     updateNodAnimation(delta);
     
-    if (isTalking) {
-      updateLipSync();
-    }
+    if (isTalking) updateLipSync();
 
     currentVRM.update(delta);
   }
@@ -1270,31 +1215,30 @@ function animate() {
 }
 
 // ============================================
-// RESIZE HANDLER
+// RESIZE
 // ============================================
 function onResize() {
   if (!container || !camera || !renderer) return;
-
   camera.aspect = container.clientWidth / container.clientHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(container.clientWidth, container.clientHeight);
 }
 
 // ============================================
-// COLOR CUSTOMIZATION
+// COLOR THEMES
 // ============================================
-export function setSkyColors(topColor, midColor, bottomColor) {
-  if (fallbackSky && fallbackSky.material.uniforms) {
-    if (topColor) fallbackSky.material.uniforms.topColor.value.setHex(topColor);
-    if (midColor) fallbackSky.material.uniforms.midColor.value.setHex(midColor);
-    if (bottomColor) fallbackSky.material.uniforms.bottomColor.value.setHex(bottomColor);
+export function setSkyColors(top, mid, bottom) {
+  if (fallbackSky?.material?.uniforms) {
+    if (top) fallbackSky.material.uniforms.topColor.value.setHex(top);
+    if (mid) fallbackSky.material.uniforms.midColor.value.setHex(mid);
+    if (bottom) fallbackSky.material.uniforms.bottomColor.value.setHex(bottom);
   }
 }
 
-export function setFloorColors(centerColor, edgeColor) {
-  if (fallbackGround && fallbackGround.material.uniforms) {
-    if (centerColor) fallbackGround.material.uniforms.centerColor.value.setHex(centerColor);
-    if (edgeColor) fallbackGround.material.uniforms.edgeColor.value.setHex(edgeColor);
+export function setFloorColors(center, edge) {
+  if (fallbackGround?.material?.uniforms) {
+    if (center) fallbackGround.material.uniforms.centerColor.value.setHex(center);
+    if (edge) fallbackGround.material.uniforms.edgeColor.value.setHex(edge);
   }
 }
 
@@ -1304,55 +1248,26 @@ export function setColorTheme(theme) {
     sunset: { skyTop: 0x4A3F6B, skyMid: 0xC97B84, skyBottom: 0xF2D7D9, floorCenter: 0xF5E6E8, floorEdge: 0xE8D0D4 },
     ocean: { skyTop: 0x1E3A5F, skyMid: 0x6B9AC4, skyBottom: 0xD4E6F1, floorCenter: 0xE8F4F8, floorEdge: 0xC8DCE8 },
     mint: { skyTop: 0x4A7C6F, skyMid: 0x8FBCB0, skyBottom: 0xD8EDE8, floorCenter: 0xE8F2EF, floorEdge: 0xC8DCD8 },
-    warm: { skyTop: 0x8B7355, skyMid: 0xC4A882, skyBottom: 0xF0E6D8, floorCenter: 0xF5EDE0, floorEdge: 0xE0D4C4 },
     pink: { skyTop: 0xB76E99, skyMid: 0xDBA8C4, skyBottom: 0xF8E8F0, floorCenter: 0xFAF0F5, floorEdge: 0xECD8E4 }
   };
-  
   const t = themes[theme];
-  if (t) {
-    setSkyColors(t.skyTop, t.skyMid, t.skyBottom);
-    setFloorColors(t.floorCenter, t.floorEdge);
-    console.log(`[3D] ✅ Theme: ${theme}`);
-  }
+  if (t) { setSkyColors(t.skyTop, t.skyMid, t.skyBottom); setFloorColors(t.floorCenter, t.floorEdge); }
 }
 
 // ============================================
 // CLEANUP
 // ============================================
 export function dispose3D() {
-  console.log("[3D] Disposing...");
-
-  if (rafId) {
-    cancelAnimationFrame(rafId);
-    rafId = null;
-  }
-
-  if (currentVRM) {
-    scene.remove(currentVRM.scene);
-    VRMUtils.deepDispose(currentVRM.scene);
-    currentVRM = null;
-  }
-
-  if (currentRoom) {
-    scene.remove(currentRoom);
-    currentRoom = null;
-  }
-
-  if (renderer) {
-    renderer.dispose();
-    if (renderer.domElement) renderer.domElement.remove();
-    renderer = null;
-  }
-
+  if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+  if (currentVRM) { scene.remove(currentVRM.scene); VRMUtils.deepDispose(currentVRM.scene); currentVRM = null; }
+  if (currentRoom) { scene.remove(currentRoom); currentRoom = null; }
+  if (renderer) { renderer.dispose(); if (renderer.domElement) renderer.domElement.remove(); renderer = null; }
   window.removeEventListener("resize", onResize);
-  avatarReady = false;
-  hasRoomLoaded = false;
-  
-  console.log("[3D] ✅ Disposed");
+  avatarReady = hasRoomLoaded = false;
 }
 
 // ============================================
-// UTILITY EXPORTS
+// EXPORTS
 // ============================================
 export function isAvatarReady() { return avatarReady; }
 export function getVRM() { return currentVRM; }
@@ -1361,8 +1276,3 @@ export function hasRoom() { return hasRoomLoaded; }
 export function getCamera() { return camera; }
 export function getRenderer() { return renderer; }
 export function getConfig() { return CONFIG; }
-
-// ============================================
-// 🎉 COMPLETION LOG
-// ============================================
-console.log("[3D] ✅ Vanakkam + Fixed Wave + Ultra Lively Complete!");
