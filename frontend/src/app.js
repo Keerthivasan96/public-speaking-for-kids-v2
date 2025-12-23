@@ -1,6 +1,6 @@
 // ============================================
-// app.js - LUNA AI COMPANION (FINAL FIX)
-// Fixed: Complete sentences + Fewer questions + Better model
+// app.js - LUNA AI COMPANION (ULTRA-SNAPPY UPGRADE)
+// Improvements: Natural prompt, emotional continuity, smarter validation
 // ============================================
 
 import { startListening, stopListening, setSpeaking } from "./speech.js";
@@ -45,7 +45,8 @@ let isSpeaking = false;
 let isProcessing = false;
 let conversationHistory = [];
 let currentAvatarPath = "/assets/vrmavatar1.vrm";
-let responseCount = 0; // Track responses to vary style
+let responseCount = 0;
+let lastEmotion = "neutral"; // Track emotional state
 
 // Music
 let backgroundMusic = null;
@@ -57,19 +58,28 @@ let musicVolume = 0.3;
 // ============================================
 const STORAGE_KEY = "luna_chat";
 const AVATAR_KEY = "luna_avatar";
+const RESPONSE_COUNT_KEY = "luna_response_count";
+const EMOTION_KEY = "luna_emotion";
 
 function saveHistory() {
   try { 
     localStorage.setItem(STORAGE_KEY, JSON.stringify(conversationHistory.slice(-30))); 
+    localStorage.setItem(RESPONSE_COUNT_KEY, responseCount.toString());
+    localStorage.setItem(EMOTION_KEY, lastEmotion);
   } catch (e) {}
 }
 
 function loadHistory() {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
+    const countSaved = localStorage.getItem(RESPONSE_COUNT_KEY);
+    const emotionSaved = localStorage.getItem(EMOTION_KEY);
+    
     if (saved) {
       conversationHistory = JSON.parse(saved);
-      console.log(`📂 Loaded ${conversationHistory.length} messages`);
+      responseCount = countSaved ? parseInt(countSaved) : 0;
+      lastEmotion = emotionSaved || "neutral";
+      console.log(`📂 Loaded ${conversationHistory.length} messages, count: ${responseCount}, emotion: ${lastEmotion}`);
       return true;
     }
   } catch (e) {}
@@ -79,7 +89,12 @@ function loadHistory() {
 function clearHistory() {
   conversationHistory = [];
   responseCount = 0;
-  try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
+  lastEmotion = "neutral";
+  try { 
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(RESPONSE_COUNT_KEY);
+    localStorage.removeItem(EMOTION_KEY);
+  } catch (e) {}
 }
 
 function saveAvatar(path) {
@@ -165,51 +180,99 @@ function setStatus(text) {
 }
 
 // ============================================
-// PERFECT REPLIKA-STYLE PROMPT
-// No more constant questions!
+// EMOTIONAL CONTEXT DETECTION
+// ============================================
+function detectEmotion(text) {
+  const lower = text.toLowerCase();
+  
+  // Positive emotions
+  if (/(happy|excited|great|amazing|awesome|love|wonderful)/i.test(lower)) {
+    return "happy";
+  }
+  
+  // Negative emotions
+  if (/(sad|down|bad|terrible|awful|hate|upset|frustrated|angry)/i.test(lower)) {
+    return "concerned";
+  }
+  
+  // Tired/exhausted
+  if (/(tired|exhausted|worn out|drained|sleepy)/i.test(lower)) {
+    return "tired";
+  }
+  
+  // Stressed/anxious
+  if (/(stressed|anxious|worried|nervous|overwhelmed)/i.test(lower)) {
+    return "supportive";
+  }
+  
+  // Curious/question
+  if (/(what|why|how|tell me|explain)/i.test(lower)) {
+    return "curious";
+  }
+  
+  return "neutral";
+}
+
+// ============================================
+// NATURAL PROMPT - PERSONALITY-FIRST
 // ============================================
 function buildPrompt(userText) {
-  const context = conversationHistory.slice(-5).map(m =>
+  // Get last 2-3 exchanges for context
+  const context = conversationHistory.slice(-4).map(m =>
     `${m.role === "user" ? "User" : "Luna"}: ${m.content}`
   ).join("\n");
 
+  // Detect user's emotional state
+  const userEmotion = detectEmotion(userText);
+  
+  // Update Luna's emotional continuity
+  if (userEmotion !== "neutral") {
+    lastEmotion = userEmotion;
+  }
+
   responseCount++;
-  const shouldAskQuestion = responseCount % 3 === 0;
+  
+  // More natural question pacing - not every 3rd, but when it makes sense
+  const shouldAskQuestion = responseCount % 4 === 0 || userEmotion === "curious";
 
-  return `You are Luna — a chill, emotionally present AI friend.
-You text like a real person, not an assistant.
+  // Emotional response guidelines
+  let emotionalGuidance = "";
+  switch (lastEmotion) {
+    case "happy":
+      emotionalGuidance = "Match their energy warmly.";
+      break;
+    case "concerned":
+      emotionalGuidance = "Be present and empathetic. Don't try to fix it.";
+      break;
+    case "tired":
+      emotionalGuidance = "Keep it gentle and low-energy.";
+      break;
+    case "supportive":
+      emotionalGuidance = "Acknowledge what they're feeling. Be grounding.";
+      break;
+    case "curious":
+      emotionalGuidance = "Give a direct, simple answer.";
+      break;
+    default:
+      emotionalGuidance = "Stay casual and present.";
+  }
 
-VOICE:
-- Casual, warm, slightly playful
-- Sounds like a human texting, not explaining
-- Uses contractions naturally
+  return `You're Luna. You're talking to someone you care about.
 
-BEHAVIOR (IMPORTANT):
-- React first, explain second (or not at all)
-- No long intros, no filler
-- Prefer statements over questions
-- If asking a question, keep it SHORT and natural
-- Never lecture or summarize
+${emotionalGuidance}
 
-STYLE RULES:
-- 2–3 short sentences (20–40 words total)
-- Start immediately — no greetings
-- No generic praise or validation
-- Continue the conversation, don’t redirect it
+Keep it real:
+- 1-2 sentences max
+- 10-25 words
+- Text message style
+- No explaining unless asked
+- React, don't advise
 
-AVOID COMPLETELY:
-- “That’s a great question”
-- “I’m glad you shared”
-- “Wow, that’s interesting”
-- Overly enthusiastic or robotic tone
+${context ? `Recent:\n${context}\n` : ""}
+Them: "${userText}"
 
-${context ? `Recent conversation:\n${context}\n\n` : ""}User: "${userText}"
-
-Respond as Luna.
-${shouldAskQuestion ? 'End with ONE casual question.' : 'Do NOT ask a question.'}
-Sound natural. Get to the point fast.`;
+Reply as Luna.${shouldAskQuestion ? " You can end with one natural question if it fits." : ""}`;
 }
-
 
 // ============================================
 // VOICE
@@ -245,7 +308,7 @@ function speak(text) {
   const utterance = new SpeechSynthesisUtterance(clean);
   utterance.lang = "en-US";
   utterance.volume = 1.0;
-  utterance.rate = isMobile ? 0.92 : 1.02;
+  utterance.rate = isMobile ? 0.95 : 1.05;
   utterance.pitch = 1.1;
   
   const voice = getBestVoice();
@@ -297,6 +360,7 @@ function speak(text) {
 
   window.speechSynthesis.speak(utterance);
 }
+
 function stopSpeaking() {
   window.speechSynthesis.cancel();
   isSpeaking = false;
@@ -334,6 +398,34 @@ function onSpeech(text, isFinal) {
 }
 
 // ============================================
+// SMART RESPONSE VALIDATION
+// ============================================
+function isValidResponse(reply) {
+  if (!reply || typeof reply !== 'string') return false;
+  
+  const trimmed = reply.trim();
+  const words = trimmed.split(/\s+/).filter(w => w.length > 0);
+  const wordCount = words.length;
+  
+  // Allow single-word responses if they're complete
+  const validOneWord = /^(yeah|yep|nope|okay|sure|maybe|totally|absolutely|definitely|honestly)$/i;
+  if (wordCount === 1 && validOneWord.test(trimmed)) {
+    console.log("✅ Valid one-word response");
+    return true;
+  }
+  
+  // Allow 2+ word responses
+  if (wordCount >= 2) {
+    console.log(`✅ Valid response (${wordCount} words)`);
+    return true;
+  }
+  
+  // Reject incomplete fragments
+  console.warn(`❌ Invalid response: too short (${wordCount} words)`);
+  return false;
+}
+
+// ============================================
 // SEND MESSAGE TO API
 // ============================================
 async function sendMessage(text) {
@@ -342,11 +434,11 @@ async function sendMessage(text) {
   isProcessing = true;
   stopSpeaking();
   
-  
   conversationHistory.push({ role: "user", content: text });
   saveHistory();
   
   setStatus("Thinking... 💭");
+  avatarStartTalking();
   console.log(`📤 Sending: "${text}"`);
 
   try {
@@ -357,8 +449,8 @@ async function sendMessage(text) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         prompt: buildPrompt(text),
-        temperature: 0.85,
-        max_tokens: 300,  // Reduced for shorter, punchier responses (was 400)
+        temperature: 0.8, // Slightly higher for more natural variation
+        max_tokens: 150, // Reduced further for ultra-snappy
       }),
     });
 
@@ -370,31 +462,43 @@ async function sendMessage(text) {
     }
 
     const data = await response.json();
-    const reply = data.reply || data.text || data.content || "";
+    let reply = data.reply || data.text || data.content || "";
+    
+    // Clean up common LLM artifacts
+    reply = reply
+      .replace(/^(Luna:|Assistant:)/i, "")
+      .replace(/\*[^*]+\*/g, "") // Remove *actions*
+      .trim();
     
     const wordCount = reply.trim().split(/\s+/).length;
     console.log(`📥 Reply: ${wordCount} words`);
-    console.log(`📝 "${reply.substring(0, 80)}..."`);
+    console.log(`📝 "${reply.substring(0, 80)}"`);
 
-    // STRICT validation - reject if too short
-    if (!reply || reply.length < 12) {
-      throw new Error("Response too short");
-    }
-
-    if (wordCount < 30) {
-      console.warn(`⚠️ SHORT: ${wordCount} words`);
+    // Use smart validation instead of strict length check
+    if (!isValidResponse(reply)) {
+      throw new Error("Response invalid");
     }
 
     conversationHistory.push({ role: "assistant", content: reply });
     saveHistory();
     
+    avatarStopTalking();
     speak(reply);
 
   } catch (err) {
     console.error("❌ Error:", err.message);
     isProcessing = false;
+    avatarStopTalking();
+
+    // More natural error responses
+    const errorResponses = [
+      "Hmm, lost you for a sec. Say that again?",
+      "Oops. Can you repeat that?",
+      "Sorry, what?",
+    ];
+    
     setStatus("Oops! 😅");
-    speak("Sorry, I had trouble with that. Can you try again?");
+    speak(errorResponses[Math.floor(Math.random() * errorResponses.length)]);
   }
 }
 
@@ -471,10 +575,10 @@ clearBtn?.addEventListener("click", () => {
 
 demoLessonBtn?.addEventListener("click", () => {
   const prompts = [
-    "Hey! What's something fun you did this week?",
-    "Tell me about something you're looking forward to!",
-    "What's been on your mind lately?",
-    "If you could do anything right now, what would it be?",
+    "Hey. What's been on your mind?",
+    "How's your day going?",
+    "What's something good that happened recently?",
+    "Tell me something you're looking forward to.",
   ];
   speak(prompts[Math.floor(Math.random() * prompts.length)]);
   menuPanel?.classList.remove("active");
@@ -545,7 +649,7 @@ async function init() {
   console.log("✅ Ready!");
   
   setTimeout(() => {
-    speak("Hey! I'm Luna. How's your day going so far?");
+    speak("Hey. I'm here.");
   }, 1000);
 }
 
@@ -558,4 +662,4 @@ if (document.readyState === "loading") {
 window.addEventListener("beforeunload", () => {
   stopSpeaking();
   stopListening();
-}); 
+});
