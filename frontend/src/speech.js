@@ -1,6 +1,7 @@
 // ============================================
-// speech.js - FIXED SPEECH RECOGNITION
-// PREVENTS cutting off mid-sentence
+// speech.js - PRODUCTION FIXES
+// Fix #1: Stricter early-send gating
+// Fix #2: Better incomplete phrase detection
 // ============================================
 
 let recognition = null;
@@ -18,28 +19,65 @@ let interimBuffer = "";
 const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
 // ============================================
-// BALANCED TIMING - Not too fast, not too slow
+// TIGHTENED TIMING - Prevents premature sends
 // ============================================
 const CONFIG = {
-  baseSilence: isMobile ? 700 : 280,           // Normal sentences
-  shortPhraseSilence: 420,                    // Wait longer for incomplete
-  completeSilence: 180,                        // Quick send for complete
+  baseSilence: isMobile ? 850 : 400,           // Increased from 280/700
+  shortPhraseSilence: 600,                     // Increased from 420
+  completeSilence: 220,                        // Increased from 180
   
-  minSendGap: 900,
-  restartDelay: isMobile ? 200 : 90,
-  minWordsForNormal: 3,                        // Need 4+ words for normal timing
+  minSendGap: 1100,                            // Increased from 900
+  restartDelay: isMobile ? 250 : 120,
+  minWordsForEarlySend: 5,                     // CRITICAL: Changed from 3 to 5
 };
 
 console.log(`🎤 Speech: ${isMobile ? 'Mobile' : 'Desktop'} mode`);
 
 /**
- * SMARTER detection - prevents cut-offs
+ * STRICTER intent detection
  */
+function hasCompleteIntent(text) {
+  const lower = text.toLowerCase().trim();
+  const lastChar = text.trim().slice(-1);
+  
+  // Clear sentence ending
+  if (['.', '!', '?'].includes(lastChar)) {
+    return true;
+  }
+  
+  // Complete statement patterns (must be 4+ words)
+  const completeStatements = [
+    /^(my name is|i am|i'm) \w+$/i,
+    /^(i live in|i work at|i go to) /i,
+    /^(i like|i love|i hate|i want|i need) /i,
+    /^(yes|no|yeah|yep|nope|okay|sure)$/i,
+  ];
+  
+  return completeStatements.some(pattern => pattern.test(lower));
+}
+
+/**
+ * Detect if phrase is clearly incomplete
+ */
+function isIncompletePhrase(text) {
+  const lower = text.toLowerCase().trim();
+  
+  // These phrases are ALWAYS incomplete
+  const incompleteStarters = [
+    /^(tell me|show me|give me|can you|could you|would you|will you)$/i,
+    /^(tell me a|give me a|show me a)$/i,
+    /^(what|what's|how|how's|why|when|where|who|which)$/i,
+    /^(i want|i need|i'm|i am)$/i,
+    /^(do you|are you|is it|can i|should i)$/i,
+  ];
+  
+  return incompleteStarters.some(pattern => pattern.test(lower));
+}
+
 function getTimeout(text) {
   const words = text.trim().split(/\s+/).filter(w => w);
   const wordCount = words.length;
   const lastChar = text.trim().slice(-1);
-  const lower = text.toLowerCase().trim();
   
   // Clear sentence ending - SEND
   if (['.', '!', '?'].includes(lastChar)) {
@@ -47,57 +85,45 @@ function getTimeout(text) {
     return CONFIG.completeSilence;
   }
   
-  // One-word quick responses ONLY if they're complete phrases
+  // Check if clearly incomplete
+  if (isIncompletePhrase(text)) {
+    console.log(`⏳ Incomplete phrase detected - waiting`);
+    return CONFIG.shortPhraseSilence;
+  }
+  
+  // One-word - only if it's a complete response
   if (wordCount === 1) {
-    const oneWordComplete = /^(yes|no|yeah|yep|nope|ok|okay|sure|hi|hey|hello|bye)$/i;
-    if (oneWordComplete.test(lower)) {
+    const oneWordComplete = /^(yes|no|yeah|yep|nope|ok|okay|sure|hi|hey|hello|bye|thanks|please)$/i;
+    if (oneWordComplete.test(text.toLowerCase())) {
       console.log(`✅ Quick one-word response`);
       return CONFIG.completeSilence;
     }
-    // Otherwise wait longer - probably incomplete
     console.log(`⏳ Single word - waiting for more`);
     return CONFIG.shortPhraseSilence;
   }
   
-  // Two-word phrases - be CAUTIOUS
-  if (wordCount === 2) {
-    const twoWordComplete = /^(good morning|good night|thank you|sounds good|not really|i see|makes sense|of course)$/i;
-    if (twoWordComplete.test(lower)) {
-      console.log(`✅ Complete two-word phrase`);
-      return CONFIG.completeSilence;
-    }
-    // Likely incomplete - wait longer
-    console.log(`⏳ Two words - likely incomplete, waiting`);
-    return CONFIG.shortPhraseSilence;
-  }
-  
-  // 3-4 words - CHECK if it's a complete phrase
-  if (wordCount <= 4) {
-    const shortComplete = /^(i'?m (good|fine|great|okay|tired|happy|sad)|that'?s (good|great|cool|nice|awesome)|sounds (good|great|fun))$/i;
-    if (shortComplete.test(lower)) {
+  // 2-3 words - be VERY cautious
+  if (wordCount <= 3) {
+    const shortComplete = /^(i'?m (good|fine|great|okay|tired)|that'?s (good|great|cool|nice)|sounds (good|great))$/i;
+    if (shortComplete.test(text.toLowerCase())) {
       console.log(`✅ Complete short phrase (${wordCount} words)`);
       return CONFIG.baseSilence;
     }
-    
-    // Check for question starters that need more
-    const incompleteStarters = /^(can you|do you|would you|could you|what|how|why|when|where|i want|i need)/i;
-    if (incompleteStarters.test(lower)) {
-      console.log(`⏳ Incomplete question/statement (${wordCount} words) - waiting`);
-      return CONFIG.shortPhraseSilence;
-    }
-    
-    console.log(`⏳ Short phrase (${wordCount} words) - waiting for more`);
+    console.log(`⏳ ${wordCount} words - likely incomplete, waiting`);
     return CONFIG.shortPhraseSilence;
   }
   
-  // 5+ words - likely complete, use normal timing
+  // 4 words - still cautious
+  if (wordCount === 4) {
+    console.log(`📝 4 words - waiting to confirm complete`);
+    return CONFIG.baseSilence;
+  }
+  
+  // 5+ words - likely complete
   console.log(`📝 Normal sentence (${wordCount} words)`);
   return CONFIG.baseSilence;
 }
 
-/**
- * Start listening
- */
 export function startListening(onFinal, options = {}) {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   
@@ -133,58 +159,64 @@ export function startListening(onFinal, options = {}) {
   };
 
   recognition.onresult = (event) => {
-  clearTimeout(silenceTimer);
+    clearTimeout(silenceTimer);
 
-  let interim = "";
-  let final = "";
+    let interim = "";
+    let final = "";
 
-  // Collect results
-  for (let i = event.resultIndex; i < event.results.length; i++) {
-    const result = event.results[i];
-    const text = result[0].transcript;
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const result = event.results[i];
+      const text = result[0].transcript;
 
-    if (result.isFinal) {
-      final += text + " ";
-    } else {
-      interim += text;
+      if (result.isFinal) {
+        final += text + " ";
+      } else {
+        interim += text;
+      }
     }
-  }
 
-  // Append confirmed speech
-  if (final) {
-    pendingText += final;
-    console.log("🎤 Final:", final.trim());
-  }
-
-  const fullText = (pendingText + interim).trim();
-  interimBuffer = interim;
-
-  if (interim && interim.length > 2) {
-    console.log("🎤 ...", interim.substring(0, 50));
-  }
-
-  // ⚡ Replika-style EARLY SEND on confident interim
-  if (
-    interim &&
-    interim.length > 8 &&
-    !/[.!?]$/.test(interim) &&
-    Date.now() - lastSendTime > CONFIG.minSendGap
-  ) {
-    const words = interim.trim().split(/\s+/).length;
-    if (words >= CONFIG.minWordsForNormal) {
-      console.log("⚡ Early interim send:", interim);
-      finalize((pendingText + interim).trim());
-      return;
+    if (final) {
+      pendingText += final;
+      console.log("🎤 Final:", final.trim());
     }
-  }
 
-  // Normal silence-based finalize
-  if (fullText) {
-    const timeout = getTimeout(fullText);
-    silenceTimer = setTimeout(() => finalize(fullText), timeout);
-  }
-};
+    const fullText = (pendingText + interim).trim();
+    interimBuffer = interim;
 
+    if (interim && interim.length > 2) {
+      console.log("🎤 ...", interim.substring(0, 50));
+    }
+
+    // ⚡ STRICTER early send - only on clear complete intent
+    if (
+      interim &&
+      interim.length > 12 &&                    // Longer threshold
+      Date.now() - lastSendTime > CONFIG.minSendGap
+    ) {
+      const words = interim.trim().split(/\s+/).length;
+      
+      // Must be 5+ words AND have complete intent
+      if (words >= CONFIG.minWordsForEarlySend && hasCompleteIntent(interim)) {
+        console.log("⚡ Early send (complete intent):", interim);
+        finalize((pendingText + interim).trim());
+        return;
+      }
+      
+      // Block early send if clearly incomplete
+      if (isIncompletePhrase(interim)) {
+        console.log("🚫 Blocking early send - incomplete phrase");
+        const timeout = getTimeout(fullText);
+        silenceTimer = setTimeout(() => finalize(fullText), timeout);
+        return;
+      }
+    }
+
+    // Normal silence-based finalize
+    if (fullText) {
+      const timeout = getTimeout(fullText);
+      silenceTimer = setTimeout(() => finalize(fullText), timeout);
+    }
+  };
 
   recognition.onerror = (e) => {
     console.log("❌ Error:", e.error);
@@ -223,9 +255,6 @@ export function startListening(onFinal, options = {}) {
   }
 }
 
-/**
- * Finalize and send
- */
 function finalize(text) {
   if (!text || text.trim().length === 0) return;
   

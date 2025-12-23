@@ -1,6 +1,8 @@
 // ============================================
-// app.js - LUNA AI COMPANION (ULTRA-SNAPPY UPGRADE)
-// Improvements: Natural prompt, emotional continuity, smarter validation
+// app.js - PRODUCTION FIXES
+// Fix #3: Clean emojis/special chars before TTS
+// Fix #4: Better turn-taking timing
+// Fix #5: Balanced response length
 // ============================================
 
 import { startListening, stopListening, setSpeaking } from "./speech.js";
@@ -13,17 +15,12 @@ import {
   useFallbackEnvironment
 } from "./threejs-avatar-3d.js";
 
-// ============================================
-// CONFIG
-// ============================================
 const API_URL = "https://public-speaking-for-kids-backend-v2.vercel.app/api/generate";
 const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
 console.log(`📱 Device: ${isMobile ? 'Mobile' : 'Desktop'}`);
 
-// ============================================
 // UI ELEMENTS
-// ============================================
 const micBtn = document.getElementById("micBtn");
 const menuToggle = document.getElementById("menuToggle");
 const menuPanel = document.getElementById("menuPanel");
@@ -37,25 +34,21 @@ const statusEl = document.getElementById("status");
 const chatCaption = document.getElementById("chatCaption");
 const avatarOptions = document.querySelectorAll(".avatar-option");
 
-// ============================================
 // STATE
-// ============================================
 let isRunning = false;
 let isSpeaking = false;
 let isProcessing = false;
 let conversationHistory = [];
 let currentAvatarPath = "/assets/vrmavatar1.vrm";
 let responseCount = 0;
-let lastEmotion = "neutral"; // Track emotional state
+let lastEmotion = "neutral";
 
 // Music
 let backgroundMusic = null;
 let isMusicPlaying = false;
 let musicVolume = 0.3;
 
-// ============================================
 // STORAGE
-// ============================================
 const STORAGE_KEY = "luna_chat";
 const AVATAR_KEY = "luna_avatar";
 const RESPONSE_COUNT_KEY = "luna_response_count";
@@ -79,7 +72,7 @@ function loadHistory() {
       conversationHistory = JSON.parse(saved);
       responseCount = countSaved ? parseInt(countSaved) : 0;
       lastEmotion = emotionSaved || "neutral";
-      console.log(`📂 Loaded ${conversationHistory.length} messages, count: ${responseCount}, emotion: ${lastEmotion}`);
+      console.log(`📂 Loaded ${conversationHistory.length} messages, count: ${responseCount}`);
       return true;
     }
   } catch (e) {}
@@ -109,9 +102,7 @@ function loadAvatar() {
   }
 }
 
-// ============================================
 // MUSIC
-// ============================================
 function initMusic() {
   backgroundMusic = document.createElement("audio");
   backgroundMusic.loop = true;
@@ -158,9 +149,7 @@ function restoreMusic() {
   if (backgroundMusic && isMusicPlaying) backgroundMusic.volume = musicVolume;
 }
 
-// ============================================
 // CAPTION
-// ============================================
 function showCaption(text) {
   if (!chatCaption) return;
   chatCaption.textContent = text;
@@ -172,40 +161,31 @@ function hideCaption() {
   chatCaption.classList.remove("active");
 }
 
-// ============================================
 // STATUS
-// ============================================
 function setStatus(text) {
   if (statusEl) statusEl.textContent = text;
 }
 
-// ============================================
-// EMOTIONAL CONTEXT DETECTION
-// ============================================
+// EMOTIONAL CONTEXT
 function detectEmotion(text) {
   const lower = text.toLowerCase();
   
-  // Positive emotions
   if (/(happy|excited|great|amazing|awesome|love|wonderful)/i.test(lower)) {
     return "happy";
   }
   
-  // Negative emotions
   if (/(sad|down|bad|terrible|awful|hate|upset|frustrated|angry)/i.test(lower)) {
     return "concerned";
   }
   
-  // Tired/exhausted
   if (/(tired|exhausted|worn out|drained|sleepy)/i.test(lower)) {
     return "tired";
   }
   
-  // Stressed/anxious
   if (/(stressed|anxious|worried|nervous|overwhelmed)/i.test(lower)) {
     return "supportive";
   }
   
-  // Curious/question
   if (/(what|why|how|tell me|explain)/i.test(lower)) {
     return "curious";
   }
@@ -214,28 +194,23 @@ function detectEmotion(text) {
 }
 
 // ============================================
-// NATURAL PROMPT - PERSONALITY-FIRST
+// FIX #5: BALANCED RESPONSE LENGTH
 // ============================================
 function buildPrompt(userText) {
-  // Get last 2-3 exchanges for context
   const context = conversationHistory.slice(-4).map(m =>
     `${m.role === "user" ? "User" : "Luna"}: ${m.content}`
   ).join("\n");
 
-  // Detect user's emotional state
   const userEmotion = detectEmotion(userText);
   
-  // Update Luna's emotional continuity
   if (userEmotion !== "neutral") {
     lastEmotion = userEmotion;
   }
 
   responseCount++;
   
-  // More natural question pacing - not every 3rd, but when it makes sense
   const shouldAskQuestion = responseCount % 4 === 0 || userEmotion === "curious";
 
-  // Emotional response guidelines
   let emotionalGuidance = "";
   switch (lastEmotion) {
     case "happy":
@@ -257,16 +232,16 @@ function buildPrompt(userText) {
       emotionalGuidance = "Stay casual and present.";
   }
 
+  // FIX #5: Better length guidance
   return `You're Luna. You're talking to someone you care about.
 
 ${emotionalGuidance}
 
-Keep it real:
-- 1-2 sentences max
-- 10-25 words
+Keep it natural:
+- 1-2 sentences (8-18 words ideal)
 - Text message style
+- React + add one small thought
 - No explaining unless asked
-- React, don't advise
 
 ${context ? `Recent:\n${context}\n` : ""}
 Them: "${userText}"
@@ -274,9 +249,7 @@ Them: "${userText}"
 Reply as Luna.${shouldAskQuestion ? " You can end with one natural question if it fits." : ""}`;
 }
 
-// ============================================
 // VOICE
-// ============================================
 function getBestVoice() {
   const voices = window.speechSynthesis.getVoices();
   if (!voices.length) return null;
@@ -290,22 +263,41 @@ function getBestVoice() {
 }
 
 // ============================================
-// SPEAK
+// FIX #3: CLEAN TEXT FOR TTS
+// ============================================
+function cleanTextForSpeech(text) {
+  return text
+    // Remove emojis (all Unicode emoji ranges)
+    .replace(/[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/gu, '')
+    // Remove other special characters that TTS struggles with
+    .replace(/[*_~`#\[\]<>]/g, '')
+    // Clean up multiple spaces
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// ============================================
+// FIX #4: BETTER TURN-TAKING TIMING
 // ============================================
 function speak(text) {
   if (!text?.trim()) return;
 
   window.speechSynthesis.cancel();
   
-  const clean = text.replace(/[*_~`#\[\]]/g, "").replace(/\s+/g, " ").trim();
+  // Keep original for caption (with emojis)
+  const originalText = text.replace(/\s+/g, " ").trim();
   
-  const words = clean.split(/\s+/).length;
-  console.log(`🔊 Speaking: "${clean.substring(0, 60)}..." (${words} words)`);
+  // Clean version for TTS (no emojis)
+  const cleanForSpeech = cleanTextForSpeech(text);
   
-  showCaption(clean);
+  const words = cleanForSpeech.split(/\s+/).length;
+  console.log(`🔊 Speaking: "${cleanForSpeech.substring(0, 60)}..." (${words} words)`);
+  
+  // Show original with emojis
+  showCaption(originalText);
   setStatus("Speaking... 💬");
   
-  const utterance = new SpeechSynthesisUtterance(clean);
+  const utterance = new SpeechSynthesisUtterance(cleanForSpeech);
   utterance.lang = "en-US";
   utterance.volume = 1.0;
   utterance.rate = isMobile ? 0.95 : 1.05;
@@ -334,11 +326,15 @@ function speak(text) {
     
     if (isRunning) {
       setStatus("Listening... 👂");
+      
+      // FIX #4: Longer delay for natural turn-taking
+      const turnDelay = isMobile ? 450 : 280;
+      
       setTimeout(() => {
-        if (isRunning && !isSpeaking) {
+        if (isRunning && !isSpeaking && !isProcessing) {
           startListeningCycle();
         }
-      }, isMobile ? 350 : 120);
+      }, turnDelay);
     } else {
       setStatus("Tap mic to talk 💭");
     }
@@ -354,7 +350,7 @@ function speak(text) {
     isProcessing = false;
     
     if (isRunning) {
-      setTimeout(startListeningCycle, 400);
+      setTimeout(startListeningCycle, 500);
     }
   };
 
@@ -370,11 +366,12 @@ function stopSpeaking() {
   restoreMusic();
 }
 
-// ============================================
 // SPEECH RECOGNITION
-// ============================================
 function startListeningCycle() {
-  if (!isRunning || isSpeaking || isProcessing) return;
+  if (!isRunning || isSpeaking || isProcessing) {
+    console.log(`🚫 Not starting: running=${isRunning}, speaking=${isSpeaking}, processing=${isProcessing}`);
+    return;
+  }
   
   console.log("🎤 Listening...");
   setStatus("Listening... 👂");
@@ -397,9 +394,7 @@ function onSpeech(text, isFinal) {
   sendMessage(text);
 }
 
-// ============================================
-// SMART RESPONSE VALIDATION
-// ============================================
+// SMART VALIDATION
 function isValidResponse(reply) {
   if (!reply || typeof reply !== 'string') return false;
   
@@ -407,27 +402,24 @@ function isValidResponse(reply) {
   const words = trimmed.split(/\s+/).filter(w => w.length > 0);
   const wordCount = words.length;
   
-  // Allow single-word responses if they're complete
+  // Allow complete single-word responses
   const validOneWord = /^(yeah|yep|nope|okay|sure|maybe|totally|absolutely|definitely|honestly)$/i;
   if (wordCount === 1 && validOneWord.test(trimmed)) {
     console.log("✅ Valid one-word response");
     return true;
   }
   
-  // Allow 2+ word responses
+  // Minimum 2 words for other responses
   if (wordCount >= 2) {
     console.log(`✅ Valid response (${wordCount} words)`);
     return true;
   }
   
-  // Reject incomplete fragments
   console.warn(`❌ Invalid response: too short (${wordCount} words)`);
   return false;
 }
 
-// ============================================
-// SEND MESSAGE TO API
-// ============================================
+// SEND MESSAGE
 async function sendMessage(text) {
   if (!text?.trim() || isProcessing) return;
   
@@ -449,8 +441,8 @@ async function sendMessage(text) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         prompt: buildPrompt(text),
-        temperature: 0.8, // Slightly higher for more natural variation
-        max_tokens: 150, // Reduced further for ultra-snappy
+        temperature: 0.8,
+        max_tokens: 180,  // FIX #5: Increased from 150 to allow slightly longer responses
       }),
     });
 
@@ -464,17 +456,16 @@ async function sendMessage(text) {
     const data = await response.json();
     let reply = data.reply || data.text || data.content || "";
     
-    // Clean up common LLM artifacts
+    // Clean up LLM artifacts (keep emojis for caption)
     reply = reply
       .replace(/^(Luna:|Assistant:)/i, "")
-      .replace(/\*[^*]+\*/g, "") // Remove *actions*
+      .replace(/\*[^*]+\*/g, "")
       .trim();
     
     const wordCount = reply.trim().split(/\s+/).length;
     console.log(`📥 Reply: ${wordCount} words`);
     console.log(`📝 "${reply.substring(0, 80)}"`);
 
-    // Use smart validation instead of strict length check
     if (!isValidResponse(reply)) {
       throw new Error("Response invalid");
     }
@@ -490,11 +481,10 @@ async function sendMessage(text) {
     isProcessing = false;
     avatarStopTalking();
 
-    // More natural error responses
     const errorResponses = [
       "Hmm, lost you for a sec. Say that again?",
       "Oops. Can you repeat that?",
-      "Sorry, what?",
+      "Sorry, what was that?",
     ];
     
     setStatus("Oops! 😅");
@@ -502,9 +492,7 @@ async function sendMessage(text) {
   }
 }
 
-// ============================================
 // AVATAR
-// ============================================
 async function switchAvatar(path) {
   console.log(`🔄 Avatar: ${path}`);
   currentAvatarPath = path;
@@ -518,10 +506,7 @@ async function switchAvatar(path) {
   }
 }
 
-// ============================================
 // EVENT LISTENERS
-// ============================================
-
 menuToggle?.addEventListener("click", () => {
   menuPanel?.classList.add("active");
   menuOverlay?.classList.add("active");
@@ -594,9 +579,7 @@ avatarOptions.forEach(btn => {
   });
 });
 
-// ============================================
 // INITIALIZE
-// ============================================
 async function init() {
   console.log("🚀 Starting Luna...");
   console.log(`📡 API: ${API_URL}`);
