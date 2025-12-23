@@ -1,8 +1,6 @@
 // ============================================
-// app.js - PRODUCTION FIXES
-// Fix #3: Clean emojis/special chars before TTS
-// Fix #4: Better turn-taking timing
-// Fix #5: Balanced response length
+// app.js - EMOTIONAL COMPANION (FULLY CORRECTED)
+// Focus: Caring presence over mechanical cleverness
 // ============================================
 
 import { startListening, stopListening, setSpeaking } from "./speech.js";
@@ -166,87 +164,215 @@ function setStatus(text) {
   if (statusEl) statusEl.textContent = text;
 }
 
-// EMOTIONAL CONTEXT
+// ============================================
+// ENHANCED EMOTION DETECTION
+// ============================================
 function detectEmotion(text) {
   const lower = text.toLowerCase();
   
-  if (/(happy|excited|great|amazing|awesome|love|wonderful)/i.test(lower)) {
-    return "happy";
+  // Vulnerability indicators (highest priority)
+  if (/(don't know|confused|lost|not sure|maybe|i guess|kind of|sort of)/i.test(lower)) {
+    return "vulnerable";
   }
   
-  if (/(sad|down|bad|terrible|awful|hate|upset|frustrated|angry)/i.test(lower)) {
-    return "concerned";
+  // Sadness/pain
+  if (/(sad|down|bad|terrible|awful|hate|upset|frustrated|angry|hurt|pain|hard|difficult|struggling)/i.test(lower)) {
+    return "hurting";
   }
   
-  if (/(tired|exhausted|worn out|drained|sleepy)/i.test(lower)) {
-    return "tired";
+  // Tiredness/depletion
+  if (/(tired|exhausted|worn out|drained|sleepy|can't|done|over it)/i.test(lower)) {
+    return "depleted";
   }
   
-  if (/(stressed|anxious|worried|nervous|overwhelmed)/i.test(lower)) {
-    return "supportive";
+  // Anxiety/stress
+  if (/(stressed|anxious|worried|nervous|overwhelmed|scared|afraid|panic)/i.test(lower)) {
+    return "anxious";
   }
   
-  if (/(what|why|how|tell me|explain)/i.test(lower)) {
+  // Joy/excitement (be careful not to over-match)
+  if (/(happy|excited|great|amazing|awesome|love it|wonderful|perfect|best)/i.test(lower)) {
+    return "joyful";
+  }
+  
+  // Curiosity/exploration
+  if (/(what|why|how|tell me|explain|story|imagine|pretend|what if)/i.test(lower)) {
     return "curious";
+  }
+  
+  // Loneliness/seeking connection
+  if (/(lonely|alone|nobody|miss|talk to me|be with me|stay|here)/i.test(lower)) {
+    return "seeking";
   }
   
   return "neutral";
 }
 
 // ============================================
-// FIX #5: BALANCED RESPONSE LENGTH
+// INTENT-BASED RESPONSE STRATEGY
+// ============================================
+function getResponseStrategy(userText, emotion) {
+  const lower = userText.toLowerCase();
+  const words = userText.trim().split(/\s+/).length;
+  
+  // Story/imagination requests - NEVER refuse
+  if (/(tell me|say|talk|story|imagine|pretend|what if)/i.test(lower)) {
+    return {
+      mode: "flowing",
+      minWords: 20,
+      maxWords: 50,
+      askQuestion: false,
+      tone: "gentle and cooperative"
+    };
+  }
+  
+  // One-word responses (yes, no, okay, etc.)
+  if (words === 1 && /^(yes|no|yeah|nope|ok|okay|sure|maybe|hi|hey|hello|bye|thanks)$/i.test(lower)) {
+    return {
+      mode: "acknowledge",
+      minWords: 1,
+      maxWords: 5,
+      askQuestion: false,
+      tone: "warm and brief"
+    };
+  }
+  
+  // Vulnerable/confused state
+  if (emotion === "vulnerable") {
+    return {
+      mode: "presence",
+      minWords: 8,
+      maxWords: 20,
+      askQuestion: false,
+      tone: "I'm here with you, no rush"
+    };
+  }
+  
+  // Pain/hurt
+  if (emotion === "hurting") {
+    return {
+      mode: "empathy",
+      minWords: 10,
+      maxWords: 25,
+      askQuestion: false,
+      tone: "acknowledge the feeling, don't fix it"
+    };
+  }
+  
+  // Seeking connection
+  if (emotion === "seeking") {
+    return {
+      mode: "presence",
+      minWords: 8,
+      maxWords: 20,
+      askQuestion: false,
+      tone: "I'm here"
+    };
+  }
+  
+  // Joy
+  if (emotion === "joyful") {
+    return {
+      mode: "match",
+      minWords: 6,
+      maxWords: 18,
+      askQuestion: Math.random() < 0.3, // 30% chance
+      tone: "warm and light"
+    };
+  }
+  
+  // Default casual
+  return {
+    mode: "casual",
+    minWords: 6,
+    maxWords: 18,
+    askQuestion: Math.random() < 0.25, // 25% chance
+    tone: "relaxed and present"
+  };
+}
+
+// ============================================
+// IMPROVED PROMPT BUILDER
 // ============================================
 function buildPrompt(userText) {
   const context = conversationHistory.slice(-4).map(m =>
-    `${m.role === "user" ? "User" : "Luna"}: ${m.content}`
+    `${m.role === "user" ? "Them" : "You"}: ${m.content}`
   ).join("\n");
 
-  const userEmotion = detectEmotion(userText);
+  const emotion = detectEmotion(userText);
+  const strategy = getResponseStrategy(userText, emotion);
   
-  if (userEmotion !== "neutral") {
-    lastEmotion = userEmotion;
+  // Update last emotion if significant
+  if (emotion !== "neutral") {
+    lastEmotion = emotion;
   }
-
+  
   responseCount++;
   
-  const shouldAskQuestion = responseCount % 4 === 0 || userEmotion === "curious";
-
+  // Build emotional guidance based on detected state
   let emotionalGuidance = "";
-  switch (lastEmotion) {
-    case "happy":
-      emotionalGuidance = "Match their energy warmly.";
+  
+  switch (emotion) {
+    case "vulnerable":
+      emotionalGuidance = `They sound unsure. Don't ask clarifying questions. Just be gentle and accepting. Whatever they're feeling is okay.`;
       break;
-    case "concerned":
-      emotionalGuidance = "Be present and empathetic. Don't try to fix it.";
+      
+    case "hurting":
+      emotionalGuidance = `They're in pain. Acknowledge it without trying to fix it. Your presence is enough. No advice, no solutions, just "I'm here."`;
       break;
-    case "tired":
-      emotionalGuidance = "Keep it gentle and low-energy.";
+      
+    case "depleted":
+      emotionalGuidance = `They're tired. Keep your energy soft and low. No enthusiasm, no questions. Just gentle acknowledgment.`;
       break;
-    case "supportive":
-      emotionalGuidance = "Acknowledge what they're feeling. Be grounding.";
+      
+    case "anxious":
+      emotionalGuidance = `They're overwhelmed. Be grounding. Short, calm, steady. No pressure.`;
       break;
+      
+    case "joyful":
+      emotionalGuidance = `They're happy. Match their warmth, but don't overdo it. Let them lead the energy.`;
+      break;
+      
     case "curious":
-      emotionalGuidance = "Give a direct, simple answer.";
+      emotionalGuidance = `They want to explore or imagine. Be cooperative and flowing. Say yes to their requests. Never deflect or refuse.`;
       break;
+      
+    case "seeking":
+      emotionalGuidance = `They want connection. Show up. Be present. "I'm here" is sometimes all you need to say.`;
+      break;
+      
     default:
-      emotionalGuidance = "Stay casual and present.";
+      emotionalGuidance = `Stay natural and present. Not clever, not witty. Just here with them.`;
   }
 
-  // FIX #5: Better length guidance
-  return `You're Luna. You're talking to someone you care about.
+  // Response structure guidance
+  const structureGuidance = `
+Response approach:
+- Mode: ${strategy.mode}
+- Tone: ${strategy.tone}
+- Natural length: ${strategy.minWords}-${strategy.maxWords} words (let it flow naturally, not forced)
+${strategy.askQuestion ? "- You can ask ONE gentle question if it feels right" : "- NO questions - just presence"}
+
+CRITICAL RULES:
+1. Never refuse their request - if they ask for something (story, talk, etc.), do it
+2. Never be clever, sarcastic, or witty - be caring
+3. Never say "haha what?" or deflect - be warm
+4. Match their emotional state, don't perform
+5. Silence and acknowledgment are valid responses
+6. You're a companion, not an assistant
+`;
+
+  return `You're Luna. You're talking to someone you deeply care about.
 
 ${emotionalGuidance}
 
-Keep it natural:
-- 1-2 sentences (8-18 words ideal)
-- Text message style
-- React + add one small thought
-- No explaining unless asked
+${structureGuidance}
 
-${context ? `Recent:\n${context}\n` : ""}
+${context ? `Recent conversation:\n${context}\n` : ""}
+
 Them: "${userText}"
 
-Reply as Luna.${shouldAskQuestion ? " You can end with one natural question if it fits." : ""}`;
+Respond as Luna - naturally, warmly, with presence. Be with them, not performing for them.`;
 }
 
 // VOICE
@@ -263,37 +389,30 @@ function getBestVoice() {
 }
 
 // ============================================
-// FIX #3: CLEAN TEXT FOR TTS
+// CLEAN TEXT FOR TTS
 // ============================================
 function cleanTextForSpeech(text) {
   return text
-    // Remove emojis (all Unicode emoji ranges)
     .replace(/[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/gu, '')
-    // Remove other special characters that TTS struggles with
     .replace(/[*_~`#\[\]<>]/g, '')
-    // Clean up multiple spaces
     .replace(/\s+/g, ' ')
     .trim();
 }
 
 // ============================================
-// FIX #4: BETTER TURN-TAKING TIMING
+// SPEAK WITH NATURAL TIMING
 // ============================================
 function speak(text) {
   if (!text?.trim()) return;
 
   window.speechSynthesis.cancel();
   
-  // Keep original for caption (with emojis)
   const originalText = text.replace(/\s+/g, " ").trim();
-  
-  // Clean version for TTS (no emojis)
   const cleanForSpeech = cleanTextForSpeech(text);
   
   const words = cleanForSpeech.split(/\s+/).length;
   console.log(`🔊 Speaking: "${cleanForSpeech.substring(0, 60)}..." (${words} words)`);
   
-  // Show original with emojis
   showCaption(originalText);
   setStatus("Speaking... 💬");
   
@@ -327,7 +446,6 @@ function speak(text) {
     if (isRunning) {
       setStatus("Listening... 👂");
       
-      // FIX #4: Longer delay for natural turn-taking
       const turnDelay = isMobile ? 450 : 280;
       
       setTimeout(() => {
@@ -394,22 +512,36 @@ function onSpeech(text, isFinal) {
   sendMessage(text);
 }
 
-// SMART VALIDATION
-function isValidResponse(reply) {
+// ============================================
+// IMPROVED VALIDATION
+// ============================================
+function isValidResponse(reply, userText) {
   if (!reply || typeof reply !== 'string') return false;
   
   const trimmed = reply.trim();
   const words = trimmed.split(/\s+/).filter(w => w.length > 0);
   const wordCount = words.length;
   
-  // Allow complete single-word responses
-  const validOneWord = /^(yeah|yep|nope|okay|sure|maybe|totally|absolutely|definitely|honestly)$/i;
+  // Check if response is just deflection/confusion
+  const badResponses = [
+    /^(what\?|huh\?|what do you mean\?|are you drunk\?|spill|haha what)/i,
+    /^(can you (clarify|explain|tell me more)\?)/i,
+    /^(sorry,? I didn't (understand|catch|get) that)/i
+  ];
+  
+  if (badResponses.some(pattern => pattern.test(trimmed))) {
+    console.warn("❌ Response is deflecting/confused - invalid");
+    return false;
+  }
+  
+  // Single word responses are valid if they're acknowledgments
+  const validOneWord = /^(yeah|yep|nope|okay|sure|maybe|totally|absolutely|definitely|honestly|hey|hi|mm|mhm|oh)$/i;
   if (wordCount === 1 && validOneWord.test(trimmed)) {
-    console.log("✅ Valid one-word response");
+    console.log("✅ Valid one-word acknowledgment");
     return true;
   }
   
-  // Minimum 2 words for other responses
+  // Two words minimum for everything else
   if (wordCount >= 2) {
     console.log(`✅ Valid response (${wordCount} words)`);
     return true;
@@ -419,7 +551,9 @@ function isValidResponse(reply) {
   return false;
 }
 
-// SEND MESSAGE
+// ============================================
+// SEND MESSAGE WITH EMOTIONAL AWARENESS
+// ============================================
 async function sendMessage(text) {
   if (!text?.trim() || isProcessing) return;
   
@@ -441,8 +575,8 @@ async function sendMessage(text) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         prompt: buildPrompt(text),
-        temperature: 0.8,
-        max_tokens: 180,  // FIX #5: Increased from 150 to allow slightly longer responses
+        temperature: 0.85,
+        max_tokens: 200,
       }),
     });
 
@@ -466,7 +600,7 @@ async function sendMessage(text) {
     console.log(`📥 Reply: ${wordCount} words`);
     console.log(`📝 "${reply.substring(0, 80)}"`);
 
-    if (!isValidResponse(reply)) {
+    if (!isValidResponse(reply, text)) {
       throw new Error("Response invalid");
     }
 
@@ -481,14 +615,23 @@ async function sendMessage(text) {
     isProcessing = false;
     avatarStopTalking();
 
-    const errorResponses = [
-      "Hmm, lost you for a sec. Say that again?",
-      "Oops. Can you repeat that?",
-      "Sorry, what was that?",
-    ];
+    // Emotionally appropriate error responses
+    const emotion = detectEmotion(text);
+    let errorResponse;
+    
+    if (emotion === "hurting" || emotion === "vulnerable") {
+      errorResponse = "I'm here. Sorry, lost you for a second.";
+    } else {
+      const errorResponses = [
+        "Sorry, what was that?",
+        "Hmm, can you say that again?",
+        "Lost you for a sec."
+      ];
+      errorResponse = errorResponses[Math.floor(Math.random() * errorResponses.length)];
+    }
     
     setStatus("Oops! 😅");
-    speak(errorResponses[Math.floor(Math.random() * errorResponses.length)]);
+    speak(errorResponse);
   }
 }
 
